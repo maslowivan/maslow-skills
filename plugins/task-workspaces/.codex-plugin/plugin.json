@@ -1,0 +1,37 @@
+{
+  "name": "task-workspaces",
+  "version": "0.1.0",
+  "description": "Isolated multi-repository worktrees per task: absolute paths, dependency reuse via copy-on-write clones, checkpoints before cleanup and restore of removed folders.",
+  "author": {
+    "name": "maslowivan",
+    "url": "https://github.com/maslowivan"
+  },
+  "homepage": "https://github.com/maslowivan/maslow-skills/tree/main/plugins/task-workspaces",
+  "repository": "https://github.com/maslowivan/maslow-skills",
+  "license": "MIT",
+  "keywords": [
+    "worktree",
+    "git",
+    "workspace",
+    "checkpoint",
+    "monorepo"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Task Workspaces",
+    "shortDescription": "Isolated multi-repo worktrees per task",
+    "longDescription": "Gives every coding task its own Git worktrees in one or more repositories: current absolute paths, fresh base branches, dependency reuse through copy-on-write clones, checkpoints of unfinished work before cleanup, restore of removed folders, disk quotas and a read-only inventory of all worktrees.",
+    "developerName": "maslowivan",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/maslowivan/maslow-skills/tree/main/plugins/task-workspaces",
+    "defaultPrompt": [
+      "Prepare isolated worktrees for this task",
+      "Show my task worktrees and disk usage",
+      "Pause this task and free its disk space"
+    ]
+  }
+}

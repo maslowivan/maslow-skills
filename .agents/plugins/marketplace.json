@@ -1,0 +1,23 @@
+{
+  "name": "maslow-skills",
+  "interface": {
+    "displayName": "maslow-skills"
+  },
+  "plugins": [
+    {
+      "name": "task-workspaces",
+      "source": {
+        "source": "local",
+        "path": "./plugins/task-workspaces"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL",
+        "products": [
+          "CODEX"
+        ]
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

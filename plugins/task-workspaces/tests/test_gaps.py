@@ -6,7 +6,10 @@ import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from helpers import Sandbox, sh  # noqa: E402
+from helpers import ROOT, Sandbox, sh  # noqa: E402
+
+sys.path.insert(0, os.path.join(ROOT, "skills", "task-workspaces", "scripts"))
+from wsp_core import disk  # noqa: E402
 
 
 class RecloneSourceTests(Sandbox):
@@ -75,7 +78,11 @@ class QuotaTests(Sandbox):
         res = self.wsp("deps", "--task", "dq", "--repo", "app")
         self.assertEqual(res["mode"], "install")
         self.assertFalse(res["cached"])
-        self.assertIn("sub-quota", res["cache_skip_reason"])
+        if disk.clone_mode(self.tmp) is None:
+            # without copy-on-write (e.g. ext4) nothing is cached regardless of the quota
+            self.assertIn("copy-on-write", res["cache_skip_reason"])
+        else:
+            self.assertIn("sub-quota", res["cache_skip_reason"])
 
 
 class SetManifestTests(Sandbox):

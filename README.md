@@ -1,18 +1,27 @@
 # maslow-skills
 
-Plugins for [Claude Code](https://code.claude.com) and skills for Codex. This
-repository is a Claude Code plugin marketplace: add it once, then install the
-plugins you need.
+Plugins and skills for **Codex** and **Claude Code**. The repository is a plugin
+marketplace for both: add it once in your agent, then install the plugins you
+need. Every plugin ships the same skill for both agents.
 
 ## Plugins
 
-| Plugin | What it does |
-| --- | --- |
-| [task-workspaces](plugins/task-workspaces) | Isolated Git worktrees per task across one or more repositories: absolute paths, dependency reuse via copy-on-write clones, checkpoints before cleanup, restore of removed folders. Works in Claude Code and Codex. |
+| Plugin | Codex | Claude Code | What it does |
+| --- | :-: | :-: | --- |
+| [task-workspaces](plugins/task-workspaces) | ✓ | ✓ | Isolated Git worktrees per task across one or more repositories: absolute paths, dependency reuse via copy-on-write clones, checkpoints before cleanup, restore of removed folders. |
 
 ## Install
 
-**Claude Code** (2.1.271 or newer):
+### Codex
+
+```sh
+codex plugin marketplace add maslowivan/maslow-skills
+codex plugin add task-workspaces@maslow-skills
+```
+
+Update later with `codex plugin marketplace upgrade maslow-skills`.
+
+### Claude Code (2.1.271 or newer)
 
 ```sh
 claude plugin marketplace add maslowivan/maslow-skills
@@ -23,31 +32,36 @@ Update later with `claude plugin marketplace update maslow-skills` and
 `claude plugin update task-workspaces@maslow-skills`. Inside a session the same
 is available through `/plugin`.
 
-**Codex:** each plugin keeps its skill in `plugins/<plugin>/skills/<skill>`; link
-or copy that folder into your Codex skills directory. See each plugin's README.
+### Only the skill, without a plugin
+
+Every skill is a plain folder at `plugins/<plugin>/skills/<skill>`; you can also
+link or copy it into `~/.codex/skills/` or `~/.claude/skills/`.
 
 ## Layout
 
 ```
-.claude-plugin/marketplace.json   catalog of all plugins in this repository
-plugins/<plugin>/                 one self-contained plugin per folder
-  .claude-plugin/plugin.json      manifest (name, version, options)
-  skills/<skill>/SKILL.md         skill instructions (also usable by Codex)
-  hooks/, bin/, tests/            optional
-scripts/validate.sh               checks every plugin and the catalog
+.agents/plugins/marketplace.json  Codex catalog of all plugins
+.claude-plugin/marketplace.json   Claude Code catalog of all plugins
+plugins/<plugin>/
+  .codex-plugin/plugin.json       Codex manifest
+  .claude-plugin/plugin.json      Claude Code manifest (options, hooks)
+  skills/<skill>/SKILL.md         the skill, shared by both agents
+  hooks/, bin/, tests/            optional (hooks and bin/ are Claude Code features)
+scripts/validate.sh               checks both catalogs and all manifests
 ```
 
 ## Adding a plugin
 
-1. Create `plugins/<name>/` with `.claude-plugin/plugin.json` and at least one
-   `skills/<skill>/SKILL.md`.
-2. Add an entry to `.claude-plugin/marketplace.json` with
-   `"source": "./plugins/<name>"`.
+1. Create `plugins/<name>/` with `skills/<skill>/SKILL.md`,
+   `.codex-plugin/plugin.json` (`"skills": "./skills/"`) and
+   `.claude-plugin/plugin.json`, both with the same `name` and `version`.
+2. Add an entry to both catalogs: `.agents/plugins/marketplace.json`
+   (`"source": {"source": "local", "path": "./plugins/<name>"}`) and
+   `.claude-plugin/marketplace.json` (`"source": "./plugins/<name>"`).
 3. If the plugin has `tests/`, CI runs them automatically.
 4. Run `scripts/validate.sh`.
 
-Bump `version` in the plugin's `plugin.json` for every release: users on a
-pinned version only receive updates when it changes.
+Bump `version` in both manifests for every release.
 
 ## License
 
