@@ -5,6 +5,12 @@ plugin bumps `version` in both `.claude-plugin/plugin.json` and
 `.codex-plugin/plugin.json` and adds a section here; CI enforces it and tags the
 release as `task-workspaces-v<version>`.
 
+## 0.4.3 — 2026-09-30
+
+- **Docs:** `/task-workspaces:setup-sparse-checkout` is the command in both Codex
+  and Claude Code (plugin skills are namespaced, so it never clashes with other
+  commands); `$setup-sparse-checkout` stays as a Codex alternative.
+
 ## 0.4.2 — 2026-09-30
 
 - **Docs:** Codex lists plugin skills in its `/` menu — `/setup-sparse-checkout`

@@ -1,6 +1,6 @@
 ---
 name: setup-sparse-checkout
-description: Build or refresh .wsp/SC-PROFILES.md, the sparse-checkout profiles of a repository's subprojects (folders, a few-word brief and tags such as package names and domains) that task-workspaces uses to create small task trees. Use when the user runs /task-workspaces:setup-sparse-checkout or /setup-sparse-checkout, or asks to set up or update sparse checkout profiles or a project index for a repository or monorepo.
+description: Build or refresh .wsp/SC-PROFILES.md, the sparse-checkout profiles of a repository's subprojects (folders, a few-word brief and tags such as package names and domains) that task-workspaces uses to create small task trees. Use when the user runs /task-workspaces:setup-sparse-checkout or $setup-sparse-checkout, or asks to set up or update sparse checkout profiles or a project index for a repository or monorepo.
 ---
 
 # Set up sparse-checkout profiles

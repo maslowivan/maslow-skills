@@ -85,9 +85,9 @@ by people:
 - tags: @acme/hub, hub.acme.dev, dashboards
 ```
 
-Build it with **`/task-workspaces:setup-sparse-checkout [folder]`** in Claude
-Code, **`/setup-sparse-checkout`** in Codex (the `/` menu lists it as “Set Up
-Sparse Checkout”; `$setup-sparse-checkout` works too), or `wsp sparse scan --write`.
+Build it with **`/task-workspaces:setup-sparse-checkout [folder]`** in Codex or
+Claude Code (in Codex `$setup-sparse-checkout` works as an alternative), or
+`wsp sparse scan --write`.
 
 > **Recommended: run it once in every repository.** Besides smaller task trees,
 > `.wsp/SC-PROFILES.md` is a compact index of the project — every subproject with
@@ -224,7 +224,7 @@ the last run.
 | Skill (`ensure`, `run`, `evict`, `close`, ...) | ✓ | ✓ |
 | Session identity | `CODEX_THREAD_ID` | `CLAUDE_CODE_SESSION_ID` |
 | CLI | `python3 <skill>/scripts/wsp.py` | `wsp` on PATH (plugin `bin/`) |
-| Sparse profiles, `setup-sparse-checkout` skill | ✓ `/setup-sparse-checkout` or `$setup-sparse-checkout` | ✓ `/task-workspaces:setup-sparse-checkout` |
+| Sparse profiles, `setup-sparse-checkout` skill | ✓ `/task-workspaces:setup-sparse-checkout` (or `$setup-sparse-checkout`) | ✓ `/task-workspaces:setup-sparse-checkout` |
 | Built-in `--worktree` routed through wsp | — | ✓ `WorktreeCreate`/`WorktreeRemove` hooks |
 | Session start/end: context and lease release | — | ✓ `SessionStart`/`SessionEnd` hooks |
 | Settings dialog when enabling | — (`wsp init`) | ✓ `userConfig` |
