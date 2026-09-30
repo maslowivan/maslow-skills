@@ -39,6 +39,7 @@ DEFAULTS = {
         "stale_review_after_days": 7,
         "keep_checkpoints_per_tree": 2,
         "lease_stale_hours": 12,
+        "close_merged": True,  # gc closes tasks whose work is already in the default branch
     },
     "agents": {"claude_hooks": False, "codex": False},
     "exclusions": {"time_machine": False, "spotlight": False},

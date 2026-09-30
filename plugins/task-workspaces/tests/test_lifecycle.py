@@ -305,6 +305,49 @@ class GcTests(Sandbox):
         with open(os.path.join(path, "wip.txt")) as fh:
             self.assertEqual(fh.read(), "wip\n")
 
+    def _squash_into_main(self, filename, content):
+        other = os.path.join(self.tmp, "merger")
+        if not os.path.isdir(other):
+            sh(["git", "clone", "-q", self.origins["app"], other], env=self.env)
+        self.git(other, "pull", "-q", "origin", "main")
+        self.write(os.path.join(other, filename), content)
+        self.git(other, "add", filename)
+        self.git(other, "commit", "-q", "-m", f"Squash {filename} (#1)")
+        self.git(other, "push", "-q", "origin", "main")
+
+    def test_merged_task_is_closed_automatically(self):
+        path = self.ensure("merged")["trees"][0]["path"]
+        self.write(os.path.join(path, "feature.txt"), "feature\n")
+        self.git(path, "add", "feature.txt")
+        self.git(path, "commit", "-q", "-m", "feature")
+        self.git(path, "push", "-q", "origin", "wsp/merged")
+        self._squash_into_main("feature.txt", "feature\n")          # merged by someone on GitHub
+        waiting = self.wsp("gc", "--apply")
+        keep = [p for p in waiting["plan"] if p.get("task") == "merged"]
+        self.assertEqual(keep[0]["action"], "keep")
+        self.assertIn("waiting for the session", keep[0]["why"])     # live lease of cli:test
+        self.assertTrue(os.path.isdir(path))
+        self.wsp("release", "--task", "merged", "--holder", "cli:test")
+        applied = self.wsp("gc", "--apply")
+        self.assertIn({"action": "close_merged", "task": "merged", "why": "all work is in the default branch"},
+                      applied["plan"])
+        self.assertFalse(os.path.exists(path))
+        status = self.wsp("status", "--task", "merged")
+        self.assertEqual(status["task"]["status"], "completed")
+
+    def test_fresh_or_unmerged_tasks_are_not_closed(self):
+        fresh = self.ensure("fresh")["trees"][0]["path"]           # no commits of its own
+        wip = self.ensure("wip")["trees"][0]["path"]
+        self.write(os.path.join(wip, "wip.txt"), "wip\n")
+        self.git(wip, "add", "wip.txt")
+        self.git(wip, "commit", "-q", "-m", "wip")                  # not merged anywhere
+        for task in ("fresh", "wip"):
+            self.wsp("release", "--task", task, "--holder", "cli:test")
+        applied = self.wsp("gc", "--apply")
+        self.assertNotIn("close_merged", [p["action"] for p in applied["plan"]])
+        self.assertTrue(os.path.isdir(fresh))
+        self.assertTrue(os.path.isdir(wip))
+
     def test_old_in_progress_task_is_only_reviewed(self):
         path = self.ensure("old")["trees"][0]["path"]
         db = sqlite3.connect(os.path.join(self.state_dir, "registry.sqlite"))

@@ -191,6 +191,25 @@ def is_ancestor(path, a, b):
     return git(path, "merge-base", "--is-ancestor", a, b, check=False).returncode == 0
 
 
+def merged_into(path, head, default_ref):
+    """True if the changes of `head` are already in `default_ref`: head is an ancestor
+    (merge / fast-forward) or merging it changes nothing (squash or rebase merge)."""
+    if not head or not default_ref or not rev_parse(path, default_ref):
+        return False
+    if is_ancestor(path, head, default_ref):
+        return True
+    scratch = tempfile.mkdtemp(prefix="wsp-objects-")
+    env = {"GIT_OBJECT_DIRECTORY": scratch,
+           "GIT_ALTERNATE_OBJECT_DIRECTORIES": os.path.join(common_dir(path), "objects")}
+    try:
+        proc = git(path, "merge-tree", "--write-tree", "--no-messages", default_ref, head, check=False, env=env)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    if proc.returncode != 0:
+        return False
+    return proc.stdout.strip().splitlines()[0] == out(path, "rev-parse", f"{default_ref}^{{tree}}")
+
+
 def covered_by_remote(path, head, default_ref):
     """True if every change in `head` already exists on a remote.
 

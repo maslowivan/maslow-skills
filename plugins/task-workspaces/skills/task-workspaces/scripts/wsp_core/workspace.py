@@ -1026,6 +1026,7 @@ def gc(ctx, apply=False):
             plan.append({"action": "mark_operation_abandoned", "operation": op["id"], "kind": op["kind"]})
             if apply:
                 ctx.reg.finish_operation(op["id"], "abandoned")
+    fetched = {}
     for task in ctx.reg.list_tasks():
         trees = [reconcile(ctx, t) for t in ctx.reg.trees_for_task(task["id"])]
         if not trees:
@@ -1054,6 +1055,20 @@ def gc(ctx, apply=False):
             if apply:
                 close(ctx, task["id"], status=task["status"], holder="gc:janitor")
             continue
+        if policy.get("close_merged", True):
+            merged, why = _merged_task(ctx, trees, leases, stale_hours, fetched)
+            if merged:
+                plan.append({"action": "close_merged", "task": task["id"], "why": why})
+                if apply:
+                    try:
+                        for lease in leases:  # stale: the session that held it is gone
+                            ctx.reg.release_lease(lease["id"])
+                        close(ctx, task["id"], status="completed", holder="gc:janitor")
+                    except WspError as exc:
+                        plan[-1]["result"] = exc.to_dict()
+                continue
+            if why:
+                plan.append({"action": "keep", "task": task["id"], "why": why})
         if task["status"] == "paused" and not leases:
             ready = [t for t in trees if t["state"] == "ready"]
             age = util.age_hours(task["updated_at"]) or 0
@@ -1093,6 +1108,55 @@ def gc(ctx, apply=False):
     for cand in cache["candidates"]:
         plan.append({"action": "delete_dependency_instance", **cand})
     return {"applied": apply, "plan": plan, "disk": disk.summary(ctx.cfg, ctx.reg)}
+
+
+def _fresh_default_ref(ctx, repo, fetched):
+    """Fetch the default branch once per gc run; None if the source or the fetch is unavailable."""
+    if repo in fetched:
+        return fetched[repo]
+    ref = None
+    try:
+        repo_cfg = ctx.cfg.repo(repo)
+        src = repo_cfg["path"]
+        if src and gitutil.is_repo(src):
+            branch, ref = _default_ref(repo_cfg)
+            fetch_cfg = ctx.cfg.data["fetch"]
+            gitutil.fetch_with_retry(src, "origin", f"+refs/heads/{branch}:{ref}", fetch_cfg["retries"],
+                                     fetch_cfg["backoff_seconds"], fetch_cfg["timeout_seconds"])
+    except WspError:
+        ref = None
+    fetched[repo] = ref
+    return ref
+
+
+def _merged_task(ctx, trees, leases, stale_hours, fetched):
+    """(True, why) when every tree's work is already in its repository's default branch and
+    nothing else would be lost; (False, reason-to-report or None) otherwise."""
+    if any(t["state"] not in ("ready", "evicted") for t in trees):
+        return False, None
+    for tree in trees:
+        if tree["state"] == "ready":
+            head = gitutil.rev_parse(tree["path"], "HEAD")
+        else:
+            if ctx.reg.valid_checkpoints(tree["id"]):
+                return False, None  # unpublished work was saved: never closed automatically
+            head = tree["head_sha"]
+        if not head or head == tree["base_sha"]:
+            return False, None  # no commits of its own yet: a fresh task, not a merged one
+        ref = _fresh_default_ref(ctx, tree["repo"], fetched)
+        if not ref or not gitutil.merged_into(tree["source_path"], head, ref):
+            return False, None
+        if tree["state"] == "ready":
+            if gitutil.status_entries(tree["path"]):
+                return False, "work merged, but the tree has uncommitted changes"
+            running = procs.cwd_processes(tree["path"])
+            if running is None or running:
+                return False, "work merged, but processes still use the tree"
+    live = [l for l in leases if l["state"] == "held" and (util.age_hours(l["heartbeat_at"]) or 0) < stale_hours]
+    if live:
+        return False, "work merged; waiting for the session to release its lease: " + ", ".join(
+            sorted({l["holder"] for l in live}))
+    return True, "all work is in the default branch"
 
 
 def _close_preview(ctx, task_id, trees):

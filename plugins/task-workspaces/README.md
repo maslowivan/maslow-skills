@@ -187,9 +187,12 @@ and the CLI, so you configure once for both agents:
 
 ## Automatic cleanup
 
-The cleanup policy (`wsp gc`) evicts paused tasks after 24 hours and removes
-finished tasks whose work is on the remote; it never deletes unpublished work
-without your confirmation and never touches other tools' worktrees. How it runs
+The cleanup policy (`wsp gc`) closes tasks whose work has been merged into the
+default branch (merge, fast-forward or squash — no need to run `wsp close` after
+a PR is merged), evicts paused tasks after 24 hours and removes finished tasks
+whose work is on the remote. It never deletes unpublished work without your
+confirmation, waits while a session still holds a task, and never touches other
+tools' worktrees. How it runs
 is set by `janitor.mode`:
 
 | Mode | How it runs |

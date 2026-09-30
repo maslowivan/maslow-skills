@@ -73,7 +73,9 @@ If any command returns `CONFIG_MISSING`, run setup before anything else:
 - Pause: `wsp release --task ID --pause` (checkpoints unique work, frees your lease).
 - Free disk now: `wsp evict --task ID` (checkpoint if needed, remove folders; restorable
   with `wsp ensure`). Stop your own dev servers first; `PROCESS_RUNNING` lists them.
-- Finished (PR merged/closed): `wsp close --task ID`. If it returns `UNIQUE_STATE`,
+- Finished: after the PR is merged the cleanup closes the task by itself once your
+  session releases it (`wsp release --task ID`); `wsp close --task ID` does it now
+  (also for PRs closed without merging). If it returns `UNIQUE_STATE`,
   show the user exactly what would be lost (`would_lose`) and rerun with
   `--discard` **only after the user explicitly confirms**.
 - Idle tasks are cleaned up automatically in the background (default `janitor.mode: on-use`);

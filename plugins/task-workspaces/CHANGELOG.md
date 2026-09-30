@@ -5,6 +5,16 @@ plugin bumps `version` in both `.claude-plugin/plugin.json` and
 `.codex-plugin/plugin.json` and adds a section here; CI enforces it and tags the
 release as `task-workspaces-v<version>`.
 
+## 0.4.0 — 2026-09-30
+
+- **Added:** the cleanup policy closes tasks whose work is already in the default
+  branch (merge, fast-forward or squash — checked with a fresh fetch): trees,
+  local branches and checkpoints are removed and the task becomes `completed`.
+  Only when every tree has commits of its own, no uncommitted changes, no
+  checkpoint of unpublished work, no running processes and no live lease (a
+  lease without a heartbeat for `lease_stale_hours` counts as gone). Runs with
+  the on-use janitor; `policy.close_merged: false` turns it off.
+
 ## 0.3.1 — 2026-09-30
 
 - **Changed:** `wsp list` hides finished (completed/cancelled) tasks that no longer

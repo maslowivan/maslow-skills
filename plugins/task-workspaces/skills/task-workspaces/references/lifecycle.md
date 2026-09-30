@@ -67,7 +67,10 @@ path or a branch checked out elsewhere is a conflict (`RESTORE_CONFLICT`,
 
 ## Automatic cleanup
 
-`wsp gc` is the cleanup policy: evict paused tasks older than
+`wsp gc` is the cleanup policy: close tasks whose work is already in the default
+branch (checked with a fresh fetch; merge, fast-forward or squash — every tree
+needs commits of its own, no uncommitted changes, no checkpoint of unpublished
+work, no processes and no live lease; `policy.close_merged`), evict paused tasks older than
 `policy.paused_evict_after_hours`, close finished tasks whose work is on the
 remote, delete checkpoints whose content reached the remote, drop unused
 dependency instances, mark stale leases `uncertain`, mark abandoned operations.
