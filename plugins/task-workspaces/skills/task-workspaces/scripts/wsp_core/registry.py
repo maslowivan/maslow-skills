@@ -13,7 +13,7 @@ import uuid
 
 from . import locks, util
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS trees (
     state TEXT NOT NULL,
     deps_state TEXT,
     size_bytes INTEGER, size_measured_at TEXT,
+    sparse_profiles TEXT, sparse_folders TEXT,
     created_at TEXT, updated_at TEXT,
     UNIQUE(task_id, repo)
 );
@@ -140,6 +141,17 @@ class Registry:
                 self.conn.execute("INSERT INTO meta(key, value) VALUES('schema_version', ?)", (str(SCHEMA_VERSION),))
             elif int(row["value"]) > SCHEMA_VERSION:
                 raise RuntimeError(f"registry schema {row['value']} is newer than this wsp ({SCHEMA_VERSION})")
+            elif int(row["value"]) < SCHEMA_VERSION:
+                self._upgrade(int(row["value"]))
+
+    def _upgrade(self, version):
+        """Called inside the migration transaction."""
+        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(trees)").fetchall()}
+        if version < 2:
+            for col in ("sparse_profiles", "sparse_folders"):
+                if col not in cols:
+                    self.conn.execute(f"ALTER TABLE trees ADD COLUMN {col} TEXT")
+        self.conn.execute("UPDATE meta SET value=? WHERE key='schema_version'", (str(SCHEMA_VERSION),))
 
     @contextlib.contextmanager
     def tx(self):

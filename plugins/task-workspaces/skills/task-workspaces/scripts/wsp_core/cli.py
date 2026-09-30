@@ -5,7 +5,7 @@ import json
 import os
 import sys
 
-from . import __version__, config as config_mod, deps, doctor, hooks, init_wizard, inventory, janitor, util, workspace
+from . import __version__, config as config_mod, deps, doctor, hooks, init_wizard, inventory, janitor, sparse, util, workspace
 from .errors import WspError
 from .registry import Registry
 
@@ -36,6 +36,9 @@ def _render_ensure(data):
         fresh = "" if t.get("base_fresh", True) else "  BASE NOT FRESH"
         lines.append(f"  {t['action']:9} {t['path']}  [{t['branch']} @ {str(t.get('head'))[:12]}]"
                      f"  lease={t.get('lease')}{fresh}")
+        if t.get("sparse"):
+            lines.append(f"            sparse {','.join(t['sparse']['profiles']) or '-'}: "
+                         f"{', '.join(t['sparse']['folders'])} (+ root files)")
     for d in data.get("dependencies") or []:
         if "error" in d:
             lines.append(f"  deps {d['repo']}:{d['package_dir']}: ERROR {d['error']['message']}")
@@ -156,7 +159,8 @@ def cmd_ensure(args):
     result = workspace.ensure(ctx, args.task, args.repo, title=args.title, tracker_ref=args.tracker_ref,
                               holder=args.holder, base_ref=args.base, branch=args.branch,
                               from_remote_branch=args.from_remote_branch, allow_stale_base=args.allow_stale_base,
-                              packages=args.deps, reclone_source=args.reclone_source)
+                              packages=args.deps, reclone_source=args.reclone_source,
+                              profiles=args.profile, folders=args.folder)
     _print(args, result, _render_ensure)
     return 0
 
@@ -268,6 +272,60 @@ def cmd_registry(args):
     return 0
 
 
+def _render_sparse(data):
+    if "profiles" not in data:
+        return json.dumps(data, indent=2, ensure_ascii=False, default=str)
+    lines = []
+    if data.get("file"):
+        lines.append(f"{data['file']}{' (written)' if data.get('written') else ''}")
+    report = data.get("report")
+    if report:
+        lines.append(f"added {len(report['added'])}, updated {len(report['updated'])}, "
+                     f"kept manual {len(report['kept_manual'])}")
+    for name, prof in data["profiles"].items():
+        lines.append(f"  {name:28} {', '.join(prof['folders'])}")
+        if prof["tags"]:
+            lines.append(f"  {'':28} tags: {', '.join(prof['tags'])}")
+    return "\n".join(lines)
+
+
+def cmd_sparse(args):
+    if args.action == "scan":
+        target = util.expand(args.path or (args.query[0] if args.query else None) or os.getcwd())
+        result = sparse.scan_and_write(target, write=args.write)
+        if not args.details:
+            result.pop("details", None)
+        if args.json is False:
+            result.pop("preview", None)
+        _print(args, result, _render_sparse)
+        return 0
+    if args.action in ("list", "match", "consumers"):
+        if args.repo:
+            cfg = config_mod.Config.load(args.config, require=True)
+            repo_path = cfg.repo(args.repo)["path"]
+        else:
+            repo_path = util.expand(args.path or os.getcwd())
+        from . import gitutil
+        root = gitutil.toplevel(repo_path)
+        profiles = sparse.load(root)
+        if profiles is None:
+            raise WspError("SPARSE_PROFILE_UNKNOWN", f"{sparse.FILE_NAME} not found in {root}; "
+                           "run `wsp sparse scan --write` there")
+        if args.action == "list":
+            _print(args, {"file": sparse.profiles_path(root), "profiles": profiles}, _render_sparse)
+        elif args.action == "match":
+            names = sparse.match(profiles, " ".join(args.query or []))
+            _print(args, {"query": " ".join(args.query or []), "matches": [{"name": n, **profiles[n]} for n in names]})
+        else:
+            _print(args, {"folder": args.folder_arg, "profiles": sparse.consumers(profiles, args.folder_arg)})
+        return 0
+    if args.action == "add":
+        ctx = _ctx(args)
+        _print(args, workspace.sparse_widen(ctx, args.task, args.repo, profiles=args.profile, folders=args.folder))
+        return 0
+    raise WspError("USAGE", f"unknown sparse action {args.action}")
+
+
 def cmd_hook(args):
     return hooks.dispatch(args.app, args.name)
 
@@ -340,6 +398,10 @@ def build_parser():
     sp.add_argument("--deps", action="append", metavar="REPO:PACKAGE_DIR", help="also prepare dependencies")
     sp.add_argument("--reclone-source", action="store_true",
                     help="if the source checkout is gone, clone it from origin (only into a missing/empty path)")
+    sp.add_argument("--profile", action="append", metavar="[REPO:]NAME",
+                    help="sparse checkout: only the folders of this SC-PROFILES.md profile (repeatable)")
+    sp.add_argument("--folder", action="append", metavar="[REPO:]FOLDER",
+                    help="sparse checkout: add a folder to the profile's folders (repeatable)")
     sp = add("attach", cmd_attach, "record a verified task <-> chat/session link")
     task_arg(sp)
     sp.add_argument("--app")
@@ -394,6 +456,17 @@ def build_parser():
     group.add_argument("--apply", action="store_true")
     sp = add("registry", cmd_registry, "registry maintenance")
     sp.add_argument("action", choices=["rebuild"])
+    sp = add("sparse", cmd_sparse, "sparse-checkout profiles (SC-PROFILES.md): scan, list, match, consumers, add")
+    sp.add_argument("action", choices=["scan", "list", "match", "consumers", "add"])
+    sp.add_argument("query", nargs="*", help="scan: repository folder (default: current); match: words to look for")
+    sp.add_argument("--write", action="store_true", help="scan: write SC-PROFILES.md (default: preview only)")
+    sp.add_argument("--details", action="store_true", help="scan: include why each folder was added")
+    sp.add_argument("--repo", help="configured repository (list/match/consumers/add)")
+    sp.add_argument("--path", help="repository folder instead of --repo")
+    sp.add_argument("--task", help="add: task id")
+    sp.add_argument("--profile", action="append", help="add: profile to add to the tree")
+    sp.add_argument("--folder", action="append", help="add: folder to add to the tree")
+    sp.add_argument("--of", dest="folder_arg", help="consumers: folder whose consumers to list")
     sp = add("hook", cmd_hook, "agent hook entry point (reads event JSON on stdin)")
     sp.add_argument("app", choices=["claude"])
     sp.add_argument("name", choices=["worktree-create", "worktree-remove", "session-start", "session-end"])

@@ -2,17 +2,26 @@
 
 A powerful alternative to the built-in worktrees of **Codex** and **Claude Code**:
 isolated Git worktrees per task, across one or more repositories, that are fast
-to prepare, easy on your SSD and fully under your control.
+to prepare, easy on your SSD, can contain just the subproject you work on, and
+stay fully under your control.
 
 ## Why use it instead of built-in worktrees
 
-1. **Faster to a working tree.** A fresh built-in worktree has no dependencies,
-   so every task starts with a full `npm`/`yarn`/`pnpm` install. `wsp` keeps a
-   verified install per lockfile and hands it to the next task as a
-   copy-on-write clone (APFS clonefile, btrfs/xfs reflink): a second task with the
-   same lockfile skips the install entirely. Only the packages the task needs are
-   prepared, even in a monorepo with a lockfile per service.
-2. **Easy on your SSD.** Clones share blocks with the cached install, so ten
+1. **Faster to a working tree.** A fresh built-in worktree has no dependencies:
+   Codex runs your setup script and Claude Code can at most symlink one shared,
+   mutable `node_modules` into it. `wsp` keeps a verified install per lockfile
+   and hands each task its own copy-on-write clone (APFS clonefile, btrfs/xfs
+   reflink): a second task with the same lockfile skips the install entirely, and
+   what one task writes into its `node_modules` never leaks into another. Only the
+   packages the task needs are prepared, even in a monorepo with a lockfile per
+   service.
+2. **Only the code the task needs — sparse checkout per subproject.** A task in
+   one service of a large monorepo can get a tree with just that service and the
+   folders it imports, instead of the whole repository (see
+   [Sparse checkout](#sparse-checkout)). Codex worktrees have no sparse option;
+   Claude Code has a single static `worktree.sparsePaths` list for every worktree.
+   `wsp` picks a profile per task from `SC-PROFILES.md`, which it builds for you.
+3. **Easy on your SSD.** Clones share blocks with the cached install, so ten
    trees with the same `node_modules` do not take ten times the space. Disk use is
    accounted and limited: a free-space reserve, quotas and a tree limit stop growth
    before the disk fills up. Trees that are no longer in use are removed
@@ -21,25 +30,77 @@ to prepare, easy on your SSD and fully under your control.
    needed. Clean trees also go when a Claude Code session ends, and any task can be
    removed with one command. Unpublished work is always checkpointed first, so a
    removed tree can be restored.
-3. **Many repositories from one project and one chat.** Built-in worktrees belong
+4. **Many repositories from one project and one chat.** Built-in worktrees belong
    to the repository the chat is opened in. With `wsp` a single orchestrating
    project (say, `my-example-workflow`) can give one task isolated trees in
    `my-example-frontend` and `my-example-backend` at the same time, without
    opening a new thread per repository. One chat can also run several tasks.
-4. **Native on macOS, works on Linux.** Built for macOS (APFS clonefile, Time
+5. **Native on macOS, works on Linux.** Built for macOS (APFS clonefile, Time
    Machine and Spotlight exclusions, optional launchd job); Linux is supported and
    tested in CI (reflink on btrfs/xfs, otherwise a normal install per tree).
    Windows is not supported yet.
-5. **Safe and transparent.** You decide where trees, the dependency cache and
+6. **Safe and transparent.** You decide where trees, the dependency cache and
    checkpoints live. Trees are ordinary folders at predictable paths
    (`<worktrees_root>/<task>/<repo>`): open them, edit a file, or remove a task
    with `wsp evict` / `wsp close`. `wsp` never touches other tools' worktrees,
    never deletes work that exists only locally without your confirmation, and
    keeps secrets out of its checkpoints.
 
+## Sparse checkout
+
+**What it is.** Git's sparse checkout puts only selected folders of a repository
+into a working tree; the rest stays in Git's history, untouched and invisible.
+`wsp` uses it per task: `wsp ensure --task hub-fix --repo my-monorepo --profile
+observability-hub` creates a tree with that service, the folders it imports and
+the repository root files — nothing else.
+
+**Why it matters.**
+
+- **Faster setup and tools.** Fewer files to write when a tree is created or
+  restored, and fewer files for everything that walks the tree: `git status`,
+  file watchers, type checkers, test runners, search.
+- **Less SSD load.** A tree with one service instead of the whole monorepo
+  writes and stores a fraction of the files; together with copy-on-write
+  dependencies, parallel tasks stay small.
+- **Fewer tokens and faster AI.** Coding agents list, search and read files to
+  find their way. With only the relevant folders present, searches return
+  fewer irrelevant hits, file listings are short, and the agent does not wander
+  into unrelated services — less context spent on noise, quicker to the right
+  code.
+- **Focus without losing correctness.** Profiles are generous on purpose:
+  referenced folders are included whole, and a task can widen its tree at any
+  time (`wsp sparse add`). Before changing shared code, `wsp sparse consumers`
+  tells which other subprojects use it.
+
+**SC-PROFILES.md.** The profiles live in the repository root, one section per
+subproject, readable and editable by people:
+
+```markdown
+## observability-hub
+
+- path: `apps/observability-hub`
+- folders: `apps/observability-hub`, `shared`, `libs/charts`
+- tags: observability-hub, @acme/hub, hub.acme.dev, dashboards
+```
+
+Build it with **`/task-workspaces:setup-sparse-checkout [folder]`** in Claude
+Code (`$setup-sparse-checkout` in Codex), or `wsp sparse scan --write`. The scan
+finds every subproject (a folder with `package.json`, `pyproject.toml`,
+`go.mod`, `wrangler.*`, ...), follows its `../` references and imports — a
+reference to even one file in `../web` includes all of `web` — and tags each
+profile with package and worker names and the domains it is served on (from
+`wrangler` routes and custom domains, `netlify.toml`, `vercel.json`, `CNAME`,
+framework `site` settings, and its README/AGENTS.md/CLAUDE.md).
+
+**Edit it freely.** Add tags a subproject is missing (team, product, service or
+domain names the agent should match), add folders, or write your own profiles.
+A later scan keeps your additions. Commit the file so teammates and task bases
+use the same profiles. Details: [references/sparse.md](skills/task-workspaces/references/sparse.md).
+
 ## Features
 
 - one task → one tree per repository, own branch, fresh base, no upstream to main
+- optional sparse checkout per subproject from `SC-PROFILES.md` (scan, match, widen, consumers)
 - absolute paths from `wsp ensure`; resume always goes through `ensure`
 - dependencies per package dir: copy-on-write clone of a verified install
   (APFS clonefile / reflink), never symlinks
@@ -63,9 +124,10 @@ normal install per tree). Windows is not supported yet.
 .claude-plugin/plugin.json        Claude Code plugin manifest with userConfig
 hooks/hooks.json                  Claude Code hooks -> bin/wsp hook claude ...
 bin/wsp                           launcher (on PATH when the plugin is enabled)
+skills/setup-sparse-checkout/     skill that builds SC-PROFILES.md (/task-workspaces:setup-sparse-checkout)
 skills/task-workspaces/
   SKILL.md                        agent workflow
-  references/                     lifecycle, dependencies, configuration, claude-code, codex
+  references/                     lifecycle, dependencies, sparse, configuration, claude-code, codex
   agents/openai.yaml              Codex skill metadata
   scripts/wsp.py                  CLI entry point
   scripts/wsp_core/               core modules
@@ -139,6 +201,7 @@ the last run.
 | Skill (`ensure`, `run`, `evict`, `close`, ...) | ✓ | ✓ |
 | Session identity | `CODEX_THREAD_ID` | `CLAUDE_CODE_SESSION_ID` |
 | CLI | `python3 <skill>/scripts/wsp.py` | `wsp` on PATH (plugin `bin/`) |
+| Sparse profiles, `setup-sparse-checkout` skill | ✓ `$setup-sparse-checkout` | ✓ `/task-workspaces:setup-sparse-checkout` |
 | Built-in `--worktree` routed through wsp | — | ✓ `WorktreeCreate`/`WorktreeRemove` hooks |
 | Session start/end: context and lease release | — | ✓ `SessionStart`/`SessionEnd` hooks |
 | Settings dialog when enabling | — (`wsp init`) | ✓ `userConfig` |
@@ -158,6 +221,6 @@ directory with an isolated Git config; they never touch real repositories.
 
 ## Not in this version
 
-Sparse-checkout profiles, tracker UI, adoption of existing native worktrees,
-multiple writers per tree, Windows. Tested in CI on macOS and Linux; live runs
+Tracker UI, adoption of existing native worktrees, multiple writers per tree,
+Windows. Tested in CI on macOS and Linux; live runs
 inside Codex and Claude Code sessions are still being piloted.

@@ -34,14 +34,21 @@ If any command returns `CONFIG_MISSING`, run setup before anything else:
    (e.g. from the tracker row). One chat can run several tasks.
 3. **Repositories.** Decide every repository the task needs (`wsp config show`
    lists configured ones). Read their instructions (AGENTS.md / CLAUDE.md).
-4. **Ensure.** `wsp ensure --task ID --repo NAME [--repo NAME2] [--deps NAME:PACKAGE_DIR] --json`
+4. **Sparse profile (large repositories).** If the repository has `SC-PROFILES.md`
+   in its root, pick the profile(s) for the part of the code the task touches:
+   `wsp sparse match "<words from the task: service, domain, package>" --repo NAME --json`,
+   or read the file (tags list names and domains). Pass them to `ensure` with
+   `--profile NAME` (several repos: `--profile REPO:PROFILE`). No file, or no
+   profile fits → full checkout; for big monorepos suggest
+   `/task-workspaces:setup-sparse-checkout`.
+5. **Ensure.** `wsp ensure --task ID --repo NAME [--repo NAME2] [--profile P] [--deps NAME:PACKAGE_DIR] --json`
    - reuses, creates (from a fresh `origin/<default>`), or restores the trees;
    - to continue an existing remote branch: `--branch B --from-remote-branch`;
    - it never switches or modifies the source checkout.
-5. **Report** to the user: each absolute path, branch, whether the base is
+6. **Report** to the user: each absolute path, branch, whether the base is
    fresh, lease (owner/observer), dependency state, and the disk line. Do not
    call a tree ready unless `ensure` said so.
-6. **Work only through these paths.** Pass them as the explicit working
+7. **Work only through these paths.** Pass them as the explicit working
    directory of every command. A path from an old message is not a source of
    truth: call `ensure` again when resuming.
 
@@ -56,6 +63,10 @@ If any command returns `CONFIG_MISSING`, run setup before anything else:
   returned `package_cwd` for package commands.
 - `wsp checkpoint --task ID` after significant steps while changes are not yet pushed.
 - `DEPS_INCOMPATIBLE` means lockfile/manifests changed: run `wsp deps` again.
+- Sparse tree missing something (an import, a config, a folder to change):
+  `wsp sparse add --task ID --repo NAME --folder PATH` (or `--profile P`). Before
+  changing a shared folder, run `wsp sparse consumers --repo NAME --of PATH --json`
+  and add the affected profiles so their checks can run.
 
 ## Pause, finish, clean up
 
@@ -87,6 +98,6 @@ If any command returns `CONFIG_MISSING`, run setup before anything else:
 - Store secrets in checkpoints, logs or commits; `wsp` re-creates env files
   from their configured source.
 
-References: `references/lifecycle.md` (states, error codes, restore),
+References: `references/lifecycle.md` (states, error codes, restore), `references/sparse.md`,
 `references/dependencies.md`, `references/configuration.md`,
 `references/claude-code.md`, `references/codex.md`.

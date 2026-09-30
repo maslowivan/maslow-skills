@@ -287,6 +287,8 @@ def restore_into(tree_path, ck):
     gitutil.git(tree_path, "read-tree", "--reset", "-u", ck["work_tree"])
     # Index := original index; untracked files become untracked again, files stay on disk.
     gitutil.git(tree_path, "read-tree", ck["index_tree"])
+    if gitutil.git(tree_path, "config", "--get", "core.sparseCheckout", check=False).stdout.strip() == "true":
+        gitutil.git(tree_path, "sparse-checkout", "reapply")  # restore skip-worktree bits outside the cone
     if ck["ignored_archive"]:
         with tarfile.open(ck["ignored_archive"], "r:gz") as tar:
             for member in tar.getmembers():

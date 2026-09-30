@@ -8,7 +8,7 @@ need. Every plugin ships the same skill for both agents.
 
 | Plugin | Codex | Claude Code | What it does |
 | --- | :-: | :-: | --- |
-| [task-workspaces](plugins/task-workspaces) | ✓ | ✓ | A faster, SSD-friendly alternative to built-in worktrees: isolated trees per task in several repositories from one project and chat, reused dependency installs via copy-on-write clones, disk limits and policy cleanup, checkpoints and restore. macOS native, Linux supported. [Why →](plugins/task-workspaces#why-use-it-instead-of-built-in-worktrees) |
+| [task-workspaces](plugins/task-workspaces) | ✓ | ✓ | A faster, SSD-friendly alternative to built-in worktrees: isolated trees per task in several repositories from one project and chat, sparse checkout per subproject (fewer files, fewer tokens), reused dependency installs via copy-on-write clones, disk limits and automatic cleanup, checkpoints and restore. macOS native, Linux supported. [Why →](plugins/task-workspaces#why-use-it-instead-of-built-in-worktrees) |
 
 ## Install
 

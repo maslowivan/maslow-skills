@@ -1,7 +1,7 @@
 {
   "name": "task-workspaces",
-  "version": "0.1.0",
-  "description": "A faster, SSD-friendly alternative to the built-in worktrees of Codex and Claude Code: isolated Git worktrees per task across one or more repositories, reused dependency installs via copy-on-write clones, checkpoints before cleanup and restore of removed folders.",
+  "version": "0.2.0",
+  "description": "A faster, SSD-friendly alternative to the built-in worktrees of Codex and Claude Code: isolated Git worktrees per task across one or more repositories, sparse-checkout profiles per subproject, reused dependency installs via copy-on-write clones, checkpoints before cleanup and restore of removed folders.",
   "author": {
     "name": "maslowivan",
     "url": "https://github.com/maslowivan"
@@ -14,13 +14,14 @@
     "git",
     "workspace",
     "checkpoint",
-    "monorepo"
+    "monorepo",
+    "sparse-checkout"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Task Workspaces",
     "shortDescription": "Faster alternative to built-in worktrees",
-    "longDescription": "A powerful alternative to built-in worktrees. Gives every coding task isolated Git worktrees in one or more repositories from a single project and chat, reuses verified dependency installs as copy-on-write clones instead of reinstalling, limits and cleans up disk use by policy, checkpoints unfinished work before removing a tree and restores it later. You choose where everything is stored.",
+    "longDescription": "A powerful alternative to built-in worktrees. Gives every coding task isolated Git worktrees in one or more repositories from a single project and chat, can check out only the folders of one subproject (sparse-checkout profiles in SC-PROFILES.md), reuses verified dependency installs as copy-on-write clones instead of reinstalling, limits and cleans up disk use by policy, checkpoints unfinished work before removing a tree and restores it later. You choose where everything is stored.",
     "developerName": "maslowivan",
     "category": "Developer Tools",
     "capabilities": [
@@ -31,7 +32,7 @@
     "defaultPrompt": [
       "Prepare isolated worktrees for this task",
       "Show my task worktrees and disk usage",
-      "Pause this task and free its disk space"
+      "Set up sparse-checkout profiles for this repository"
     ]
   }
 }

@@ -7,7 +7,9 @@ import signal
 import socket
 import subprocess
 
-from . import checkpoint, deps, disk, gitutil, locks, manifests, procs, safety, util
+import json
+
+from . import checkpoint, deps, disk, gitutil, locks, manifests, procs, safety, sparse, util
 from .errors import WspError
 
 ACTIVE_STATES = ("ready",)
@@ -117,6 +119,12 @@ def materialize_secrets(ctx, tree, profile):
         dst = os.path.join(tree["path"], rel)
         if os.path.lexists(dst):
             continue
+        if tree.get("sparse_folders"):
+            cone = json.loads(tree["sparse_folders"])
+            parent = os.path.dirname(rel)
+            if parent and not any(parent == f or parent.startswith(f + "/") or f.startswith(parent + "/")
+                                  for f in cone):
+                continue  # its folder is not checked out in this sparse tree
         source = item.get("source", "canonical")
         if source == "canonical":
             src = os.path.join(tree["source_path"], rel)
@@ -170,13 +178,29 @@ def reconcile(ctx, tree):
 
 
 # --- ensure -------------------------------------------------------------------------
+def _sparse_requests(repos, profiles, folders):
+    """Map --profile/--folder specs (NAME or REPO:NAME) to {repo: {"profiles": [...], "folders": [...]}}."""
+    out = {}
+    for kind, specs in (("profiles", profiles or []), ("folders", folders or [])):
+        for spec in specs:
+            repo, sep, value = spec.partition(":")
+            if not sep or repo not in repos:
+                if len(repos) != 1:
+                    raise WspError("USAGE", f"with several repositories write --{kind[:-1]} REPO:{spec}", spec=spec)
+                repo, value = repos[0], spec
+            out.setdefault(repo, {"profiles": [], "folders": []})[kind].append(value)
+    return out
+
+
 def ensure(ctx, task_id, repos, title=None, tracker_ref=None, holder=None, base_ref=None, branch=None,
-           from_remote_branch=False, allow_stale_base=False, packages=None, reclone_source=False):
+           from_remote_branch=False, allow_stale_base=False, packages=None, reclone_source=False,
+           profiles=None, folders=None):
     util.validate_task_id(task_id)
     if not repos:
         raise WspError("USAGE", "at least one --repo is required")
     for repo in repos:
         ctx.cfg.repo(repo)
+    sparse_req = _sparse_requests(repos, profiles, folders)
     app, session_id, holder, confirmed = detect_identity(holder)
     _guard_root(ctx)
     task = ctx.reg.get_task(task_id)
@@ -195,7 +219,7 @@ def ensure(ctx, task_id, repos, title=None, tracker_ref=None, holder=None, base_
                     if existing and existing["state"] != "closed":
                         existing = reconcile(ctx, existing)
                     if existing and existing["state"] == "ready":
-                        info = _reuse(ctx, existing, holder)
+                        info = _reuse(ctx, existing, holder, sparse_req.get(repo))
                     elif existing and existing["state"] in ("evicted", "missing", "recovery_failed"):
                         info = restore_tree(ctx, existing, holder, op, reclone_source=reclone_source)
                     elif existing and existing["state"] == "unknown":
@@ -204,7 +228,7 @@ def ensure(ctx, task_id, repos, title=None, tracker_ref=None, holder=None, base_
                     else:
                         info = _create(ctx, task_id, repo, existing, holder, op, base_ref=base_ref, branch=branch,
                                        from_remote_branch=from_remote_branch, allow_stale_base=allow_stale_base,
-                                       new_task=new_task and not created)
+                                       new_task=new_task and not created, sparse_req=sparse_req.get(repo))
                         created.append(info["tree_id"])
                     warnings.extend(info.pop("warnings", []))
                     results.append(info)
@@ -233,7 +257,12 @@ def ensure(ctx, task_id, repos, title=None, tracker_ref=None, holder=None, base_
             "trees": results, "dependencies": dep_results, "disk": summary, "warnings": warnings}
 
 
-def _reuse(ctx, tree, holder):
+def _reuse(ctx, tree, holder, sparse_req=None):
+    widened = None
+    if sparse_req:
+        if tree["sparse_folders"]:
+            widened = _widen(ctx, tree, sparse_req.get("profiles"), sparse_req.get("folders"))
+            tree = ctx.reg.get_tree(tree["id"])
     lease, ok = ctx.reg.acquire_lease(tree["id"], holder)
     head = gitutil.rev_parse(tree["path"], "HEAD")
     branch = gitutil.out(tree["path"], "rev-parse", "--abbrev-ref", "HEAD")
@@ -243,14 +272,67 @@ def _reuse(ctx, tree, holder):
         warnings.append(f"{tree['repo']}: HEAD is on '{branch}', registry expects '{tree['branch']}'")
     if not ok:
         warnings.append(f"{tree['repo']}: write lease is held by {lease['holder']}; you are an observer")
+    if sparse_req and not tree["sparse_folders"]:
+        warnings.append(f"{tree['repo']}: tree is a full checkout; sparse profile ignored")
     ctx.reg.update_tree(tree["id"], head_sha=head)
     return {"repo": tree["repo"], "tree_id": tree["id"], "path": tree["path"], "branch": branch, "head": head,
             "base_sha": tree["base_sha"], "base_fresh": bool(tree["base_fresh"]), "state": "ready", "action": "reused",
-            "dirty_entries": dirty, "lease": "owner" if ok else "observer", "warnings": warnings}
+            "dirty_entries": dirty, "lease": "owner" if ok else "observer", **_sparse_info(tree),
+            **({"sparse_added": widened["added"]} if widened else {}), "warnings": warnings}
+
+
+def _sparse_info(tree):
+    if not tree.get("sparse_folders"):
+        return {"sparse": None}
+    return {"sparse": {"profiles": json.loads(tree["sparse_profiles"] or "[]"),
+                       "folders": json.loads(tree["sparse_folders"])}}
+
+
+def _sparse_folders_for(src, rev, sparse_req):
+    """Resolve requested profiles (from SC-PROFILES.md at the base revision) and extra folders."""
+    if not sparse_req:
+        return None, None, None
+    names = sparse_req.get("profiles") or []
+    folders = []
+    source = None
+    if names:
+        profiles, source = sparse.load_at(src, rev)
+        folders = sparse.resolve(profiles, names, source)
+    for extra in sparse_req.get("folders") or []:
+        norm = sparse._norm_folder(extra)
+        if not norm:
+            raise WspError("PATH_UNSAFE", "invalid folder", folder=extra)
+        folders.append(norm)
+    return names, sparse._dedupe(folders), source
+
+
+def _checkout_sparse(src, path, folders, warnings):
+    """Populate a --no-checkout worktree with only `folders` (cone mode)."""
+    had_worktree_config = sparse.worktree_config_enabled(src)
+    sparse.apply(path, folders)
+    if not had_worktree_config and sparse.worktree_config_enabled(src):
+        warnings.append("git enabled extensions.worktreeConfig in the repository config (required for "
+                        "per-worktree sparse checkout; the main checkout stays a full checkout)")
+
+
+def _widen(ctx, tree, profile_names=None, folders=None):
+    names, new_folders, _ = _sparse_folders_for(tree["source_path"], None, {"profiles": profile_names or [],
+                                                                             "folders": folders or []})
+    current = json.loads(tree["sparse_folders"] or "[]")
+    added = [f for f in new_folders or [] if f not in current]
+    if added:
+        disk.admit(ctx.cfg, ctx.reg, 0, kind="sparse widen")
+        sparse.add(tree["path"], added)
+    all_names = sparse._dedupe(json.loads(tree["sparse_profiles"] or "[]") + (names or []))
+    updated = ctx.reg.update_tree(tree["id"], sparse_folders=json.dumps(current + added),
+                                  sparse_profiles=json.dumps(all_names),
+                                  size_bytes=disk.dir_size(tree["path"]), size_measured_at=util.now_iso())
+    manifests.write_manifest(ctx.cfg, ctx.reg, updated)
+    return {"added": added, "folders": current + added, "profiles": all_names}
 
 
 def _create(ctx, task_id, repo, existing, holder, op, base_ref=None, branch=None, from_remote_branch=False,
-            allow_stale_base=False, new_task=False):
+            allow_stale_base=False, new_task=False, sparse_req=None):
     repo_cfg = ctx.cfg.repo(repo)
     src = _validate_source(repo_cfg)
     default_branch, default_ref = _default_ref(repo_cfg)
@@ -288,6 +370,7 @@ def _create(ctx, task_id, repo, existing, holder, op, base_ref=None, branch=None
             base_fresh = False if base_ref != default_ref else base_fresh
     if not start:
         raise WspError("GIT_FAILED", "base revision not found", base=base_ref or default_ref)
+    profile_names, sparse_folders, sparse_source = _sparse_folders_for(src, start, sparse_req)
 
     estimate = _estimate(ctx, repo)
     disk.admit(ctx.cfg, ctx.reg, estimate, new_trees=1, new_task=new_task)
@@ -295,7 +378,9 @@ def _create(ctx, task_id, repo, existing, holder, op, base_ref=None, branch=None
 
     fields = dict(task_id=task_id, repo=repo, source_path=src, origin=gitutil.origin_url(src), path=path,
                   branch=branch, base_sha=start, base_fresh=1 if base_fresh else 0, head_sha=start,
-                  state="provisioning", deps_state=None, size_bytes=None, remote_covered_sha=None)
+                  state="provisioning", deps_state=None, size_bytes=None, remote_covered_sha=None,
+                  sparse_profiles=json.dumps(profile_names) if sparse_folders else None,
+                  sparse_folders=json.dumps(sparse_folders) if sparse_folders else None)
     if existing:
         tree = ctx.reg.update_tree(existing["id"], generation=existing["generation"] + 1, **fields)
     else:
@@ -303,7 +388,11 @@ def _create(ctx, task_id, repo, existing, holder, op, base_ref=None, branch=None
     ctx.reg.operation_stage(op, f"create:{repo}", tree_id=tree["id"])
     os.makedirs(os.path.dirname(path), exist_ok=True)
     try:
-        gitutil.git(src, "worktree", "add", "--no-track", "-b", branch, path, start)
+        if sparse_folders:
+            gitutil.git(src, "worktree", "add", "--no-track", "--no-checkout", "-b", branch, path, start)
+            _checkout_sparse(src, path, sparse_folders, warnings)
+        else:
+            gitutil.git(src, "worktree", "add", "--no-track", "-b", branch, path, start)
     except WspError:
         ctx.reg.update_tree(tree["id"], state="closed")
         raise
@@ -323,7 +412,8 @@ def _create(ctx, task_id, repo, existing, holder, op, base_ref=None, branch=None
     ctx.reg.event("create", task_id, tree["id"], branch=branch, base=start)
     return {"repo": repo, "tree_id": tree["id"], "path": path, "branch": branch, "head": start, "base_sha": start,
             "base_fresh": base_fresh, "state": "ready", "action": "created", "lease": "owner",
-            "secrets_materialized": [s["path"] for s in secrets], "size": util.human_bytes(size), "warnings": warnings}
+            "secrets_materialized": [s["path"] for s in secrets], "size": util.human_bytes(size),
+            **_sparse_info(tree), **({"sparse_source": sparse_source} if sparse_folders else {}), "warnings": warnings}
 
 
 def _rollback_created(ctx, tree_ids):
@@ -447,6 +537,7 @@ def _restore(ctx, tree, holder, op, reclone_source=False):
         warnings.append(f"{tree['repo']}: removed stale registration of the missing tree")
 
     branch = tree["branch"]
+    sparse_folders = json.loads(tree["sparse_folders"]) if tree["sparse_folders"] else None
     if gitutil.local_branch_exists(src, branch):
         where = gitutil.branch_checked_out_at(src, branch)
         if where:
@@ -457,11 +548,14 @@ def _restore(ctx, tree, holder, op, reclone_source=False):
                 raise WspError("RESTORE_CONFLICT", "branch moved since the checkpoint; restore would lose "
                                "either the branch or the checkpoint", branch=branch, tip=tip, checkpoint_head=head)
             head = tip
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        gitutil.git(src, "worktree", "add", path, branch)
+        add_args = ["worktree", "add"] + (["--no-checkout"] if sparse_folders else []) + [path, branch]
     else:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        gitutil.git(src, "worktree", "add", "--no-track", "-b", branch, path, head)
+        add_args = (["worktree", "add", "--no-track"] + (["--no-checkout"] if sparse_folders else [])
+                    + ["-b", branch, path, head])
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    gitutil.git(src, *add_args)
+    if sparse_folders:
+        _checkout_sparse(src, path, sparse_folders, warnings)
     gitutil.git(src, "worktree", "lock", "--reason", f"wsp:{tree['task_id']}", path)
     admin_id = os.path.basename(gitutil.absolute_git_dir(path))
     tree = ctx.reg.update_tree(tree["id"], admin_id=admin_id, generation=tree["generation"] + 1, source_path=src)
@@ -488,7 +582,7 @@ def _restore(ctx, tree, holder, op, reclone_source=False):
             "action": "restored", "from_checkpoint": ck["seq"] if ck else None,
             "checkpoint_time": ck["created_at"] if ck else None, "verified": bool(restored) or not ck,
             "secrets_materialized": [s["path"] for s in secrets], "dependencies": dep_results,
-            "lease": "owner", "warnings": warnings}
+            "lease": "owner", **_sparse_info(tree), "warnings": warnings}
 
 
 def restore(ctx, task_id, repos=None, holder=None, reclone_source=False):
@@ -524,7 +618,7 @@ def tree_status(ctx, tree, detailed=True):
     tree = reconcile(ctx, tree)
     info = {"repo": tree["repo"], "tree_id": tree["id"], "path": tree["path"], "state": tree["state"],
             "branch": tree["branch"], "base_sha": tree["base_sha"], "base_fresh": bool(tree["base_fresh"]),
-            "generation": tree["generation"], "leases": ctx.reg.active_leases(tree["id"])}
+            "generation": tree["generation"], "leases": ctx.reg.active_leases(tree["id"]), **_sparse_info(tree)}
     ck = ctx.reg.latest_checkpoint(tree["id"])
     info["last_checkpoint"] = {"seq": ck["seq"], "at": ck["created_at"], "head": ck["head_sha"]} if ck else None
     if tree["state"] == "ready" and detailed:
@@ -1043,3 +1137,17 @@ def rebuild_registry(ctx):
                                    confirmed=bool(s.get("confirmed")), role=s.get("role") or "owner")
     return {"tasks": restored_tasks, "trees": restored_trees, "checkpoints": restored_cks}
 
+
+
+def sparse_widen(ctx, task_id, repo, profiles=None, folders=None):
+    tree = ctx.reg.find_tree(task_id, repo)
+    if not tree:
+        raise WspError("TREE_UNKNOWN", "no such tree", task=task_id, repo=repo)
+    tree = reconcile(ctx, tree)
+    if tree["state"] != "ready":
+        raise WspError("TREE_UNKNOWN", f"tree is {tree['state']}; run `wsp ensure` first", repo=repo)
+    if not tree["sparse_folders"]:
+        raise WspError("USAGE", "this tree is a full checkout; nothing to add", repo=repo)
+    with locks.locked(ctx.cfg.state_dir, f"tree:{tree['id']}"):
+        result = _widen(ctx, tree, profiles, folders)
+    return {"task": task_id, "repo": repo, **result}

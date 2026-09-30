@@ -1,0 +1,4 @@
+interface:
+  display_name: "Set Up Sparse Checkout"
+  short_description: "Build SC-PROFILES.md: folders and tags per subproject"
+  default_prompt: "Use $setup-sparse-checkout to build sparse-checkout profiles for this repository."
