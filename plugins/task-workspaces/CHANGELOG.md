@@ -5,6 +5,12 @@ plugin bumps `version` in both `.claude-plugin/plugin.json` and
 `.codex-plugin/plugin.json` and adds a section here; CI enforces it and tags the
 release as `task-workspaces-v<version>`.
 
+## 0.5.2 — 2026-10-01
+
+- **Fixed:** the disk budget of `wsp run --max-growth-gib` also counts the growth
+  of the task tree itself, not only the drop of free space on the volume (which
+  other processes move); the budget test was flaky on a busy CI runner.
+
 ## 0.5.1 — 2026-10-01
 
 - **Fixed:** `wsp --version` reports the plugin version from its manifest (it

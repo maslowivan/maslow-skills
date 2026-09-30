@@ -949,6 +949,9 @@ def run(ctx, task_id, repo, command, package_dir=None, holder=None, skip_deps_ch
     poll_seconds = float(os.environ.get("WSP_RUN_POLL_SECONDS", poll_seconds))
     budget_gib = max_growth_gib if max_growth_gib is not None else limits.get("run_max_growth_gib")
     free_start = disk.free_bytes(ctx.root)
+    # the tree's own growth is measured too: free space of a shared volume moves with other
+    # processes, the tree only with this command
+    tree_start = disk.dir_size(tree["path"]) if budget_gib is not None else None
     if free_start < limits["emergency_free_gib"] * util.GIB:
         raise WspError("DISK_LOW", "free space is below the emergency floor")
     proc = subprocess.Popen(command, cwd=cwd, start_new_session=True)
@@ -964,9 +967,11 @@ def run(ctx, task_id, repo, command, package_dir=None, holder=None, skip_deps_ch
                 free_now = disk.free_bytes(ctx.root)
                 if free_now < limits["emergency_free_gib"] * util.GIB:
                     stop_reason = "free space fell below the emergency floor"
-                elif budget_gib is not None and free_start - free_now > budget_gib * util.GIB:
-                    stop_reason = (f"the command used {util.human_bytes(free_start - free_now)}, more than its "
-                                   f"{budget_gib} GiB disk budget")
+                elif budget_gib is not None:
+                    used = max(free_start - free_now, (disk.dir_size(tree["path"]) or 0) - (tree_start or 0))
+                    if used > budget_gib * util.GIB:
+                        stop_reason = (f"the command used {util.human_bytes(used)}, more than its "
+                                       f"{budget_gib} GiB disk budget")
                 if stop_reason:
                     _kill_group(proc)
     except KeyboardInterrupt:
