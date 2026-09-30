@@ -307,7 +307,11 @@ def cmd_sparse(args):
             repo_path = util.expand(args.path or os.getcwd())
         from . import gitutil
         root = gitutil.toplevel(repo_path)
-        profiles = sparse.load(root)
+        profiles = None
+        if args.repo:  # the committed version on the default branch is what new tasks use
+            default = cfg.repo(args.repo).get("default_branch") or gitutil.default_branch(root)
+            profiles, _ = sparse.load_at(root, f"refs/remotes/origin/{default}")
+        profiles = profiles if profiles is not None else sparse.load(root)
         if profiles is None:
             raise WspError("SPARSE_PROFILE_UNKNOWN", f"{sparse.FILE_NAME} not found in {root}; "
                            "run `wsp sparse scan --write` there")

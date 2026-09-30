@@ -37,7 +37,8 @@ class SparseSandbox(Sandbox):
             "name": "acme-api", "routes": [{"pattern": "api.acme.dev/*", "custom_domain": True}],
             "vars": {"UPSTREAM_URL": "https://upstream.vendor.io"}}, indent=2))
         w(os.path.join(c, "services/api/README.md"),
-          "Served at https://api.acme.dev and https://status.acme.dev; built with https://vitejs.dev\n")
+          "Served at https://api.acme.dev and https://status.acme.dev; built with https://vitejs.dev\n"
+          "Code lives in lib.rs, schema.sql and Button.svelte; see docs.acme.dev\n")
         w(os.path.join(c, "services/api/src/main.ts"), "export const api = 1;\n")
         self.git(c, "add", "-A")
         self.git(c, "commit", "-q", "-m", "monorepo")
@@ -61,6 +62,9 @@ class ScanTests(SparseSandbox):
         self.assertIn("acme-api", api["tags"])            # worker name
         self.assertNotIn("upstream.vendor.io", api["tags"])  # vars are not where the service is served
         self.assertNotIn("vitejs.dev", api["tags"])
+        for filename in ("lib.rs", "schema.sql", "button.svelte"):   # file names are not hosts
+            self.assertNotIn(filename, api["tags"])
+        self.assertIn("docs.acme.dev", api["tags"])      # bare host of the repo's own domain
         self.assertFalse(os.path.exists(os.path.join(self.canon["mono"], "SC-PROFILES.md")))  # preview only
 
     def test_rescan_keeps_user_edits(self):
@@ -85,6 +89,8 @@ class ScanTests(SparseSandbox):
         self.assertIn("web", listing["profiles"])
         match = self.wsp("sparse", "match", "api.acme.dev", "--repo", "mono")
         self.assertEqual(match["matches"][0]["name"], "api")
+        match = self.wsp("sparse", "match", "hub", "--repo", "mono")   # no substring hits (e.g. in .github)
+        self.assertEqual(match["matches"], [])
         consumers = self.wsp("sparse", "consumers", "--repo", "mono", "--of", "shared/ui")
         self.assertEqual(consumers["profiles"], ["web"])
 

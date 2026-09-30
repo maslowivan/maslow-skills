@@ -160,13 +160,33 @@ def resolve(profiles, names, source=None):
     return _dedupe(folders)
 
 
+def _tokens(text):
+    """Whole words; domains and package names are kept whole as well as split."""
+    text = text.lower()
+    out = set(t for t in re.split(r"[\s,;/()]+", text) if t)
+    for t in list(out):
+        out.update(p for p in re.split(r"[^a-z0-9]+", t) if p)
+    return out
+
+
 def match(profiles, query):
-    """Rank profiles by how many query words appear in name, path, tags and folders."""
+    """Rank profiles by whole-word matches: profile name and tags weigh more than paths."""
     words = [w for w in re.split(r"[\s,;/]+", query.lower()) if len(w) > 1]
     scored = []
     for name, prof in profiles.items():
-        hay = " ".join([name, prof.get("path") or ""] + prof["tags"] + prof["folders"]).lower()
-        score = sum(3 if w == name.lower() else 1 for w in words if w in hay)
+        name_tokens = _tokens(name)
+        tag_tokens = _tokens(" ".join(prof["tags"]))
+        path_tokens = _tokens(" ".join([prof.get("path") or ""] + prof["folders"]))
+        score = 0
+        for w in words:
+            if w == name.lower():
+                score += 6
+            elif w in name_tokens:
+                score += 4
+            elif w in tag_tokens:
+                score += 3
+            elif w in path_tokens:
+                score += 1
         if score:
             scored.append((score, name))
     return [n for _, n in sorted(scored, key=lambda x: (-x[0], x[1]))]
@@ -393,25 +413,27 @@ def served_domains(repo_root, unit, files):
 
 def doc_domains(repo_root, unit, own_registrable):
     """Hosts mentioned in the subproject's README/AGENTS/CLAUDE that belong to the repo's own domains."""
-    hosts = []
+    url_hosts, bare_hosts = [], []
     for name in DOC_FILES:
         path = os.path.join(repo_root, unit, name)
         if not os.path.isfile(path):
             continue
         with open(path, encoding="utf-8", errors="ignore") as fh:
             text = fh.read(MAX_SCAN_BYTES)
-        hosts.extend(m.group(1) for m in _URL_HOST.finditer(text))
-        hosts.extend(m.group(2) for m in _HOSTNAME.finditer(text))
+        url_hosts.extend(m.group(1) for m in _URL_HOST.finditer(text))
+        bare_hosts.extend(m.group(2) for m in _HOSTNAME.finditer(text))
     out = []
-    for h in hosts:
+    # links (https://host) count when they belong to the repo's own domains, or when the repo
+    # declares none; bare names only when they belong to the repo's own domains (otherwise
+    # file names such as lib.rs or schema.sql would look like hosts)
+    for h in url_hosts:
         c = _clean_host(h)
-        if not c:
-            continue
-        if own_registrable and _registrable(c) not in own_registrable:
-            continue
-        if not own_registrable and not re.search(r"^https?://", h) and "." not in c:
-            continue
-        out.append(c)
+        if c and (not own_registrable or _registrable(c) in own_registrable):
+            out.append(c)
+    for h in bare_hosts:
+        c = _clean_host(h)
+        if c and own_registrable and _registrable(c) in own_registrable:
+            out.append(c)
     return _dedupe(out)
 
 
