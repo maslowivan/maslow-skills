@@ -1,6 +1,6 @@
 {
   "name": "task-workspaces",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "A faster, SSD-friendly alternative to the built-in worktrees of Codex and Claude Code: isolated Git worktrees per task across one or more repositories, sparse-checkout profiles per subproject, reused dependency installs via copy-on-write clones, checkpoints before cleanup and restore of removed folders.",
   "author": {
     "name": "maslowivan",

@@ -99,7 +99,9 @@ Claude Code (in Codex `$setup-sparse-checkout` works as an alternative), or
 > ```markdown
 > Project map: `.wsp/SC-PROFILES.md` lists every subproject with a short brief,
 > its folders and domains — read it first to find where a change belongs.
-> ``` The scan
+> ```
+
+The scan
 finds every subproject (a folder with `package.json`, `pyproject.toml`,
 `go.mod`, `wrangler*`, ...; hidden tooling folders like `.claude` are not
 subprojects but are included in every profile), follows its `../` references
