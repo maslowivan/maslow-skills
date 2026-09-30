@@ -1,0 +1,4 @@
+#!/bin/sh
+# Claude Code puts plugin bin/ on PATH; this launcher runs the skill's CLI.
+here="$(cd "$(dirname "$0")" && pwd)"
+exec python3 "$here/../skills/task-workspaces/scripts/wsp.py" "$@"

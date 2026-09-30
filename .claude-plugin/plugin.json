@@ -1,0 +1,64 @@
+{
+  "name": "task-workspaces",
+  "displayName": "Task Workspaces",
+  "version": "0.1.0",
+  "description": "Isolated multi-repository worktrees per task: absolute paths, dependency reuse via copy-on-write clones, checkpoints before cleanup and restore of removed folders.",
+  "author": {
+    "name": "maslowivan",
+    "url": "https://github.com/maslowivan"
+  },
+  "homepage": "https://github.com/maslowivan/maslow-worktree-skill",
+  "repository": "https://github.com/maslowivan/maslow-worktree-skill",
+  "license": "MIT",
+  "keywords": [
+    "worktree",
+    "git",
+    "workspace",
+    "checkpoint",
+    "monorepo"
+  ],
+  "userConfig": {
+    "worktrees_root": {
+      "type": "directory",
+      "title": "Task worktrees folder",
+      "description": "Where task worktrees are created. Must not have node_modules or package.json in a parent folder.",
+      "default": "~/worktrees/tasks"
+    },
+    "state_dir": {
+      "type": "directory",
+      "title": "State folder",
+      "description": "Registry, manifests and checkpoints. Kept when the plugin is uninstalled.",
+      "default": "~/.local/share/wsp"
+    },
+    "dependency_strategy": {
+      "type": "string",
+      "title": "Dependency preparation",
+      "description": "auto: copy-on-write clone of a verified install when possible, otherwise install; clone; install; none.",
+      "default": "auto",
+      "options": [
+        "auto",
+        "clone",
+        "install",
+        "none"
+      ]
+    },
+    "disk_reserve_gib": {
+      "type": "number",
+      "title": "Free space reserve (GiB)",
+      "description": "New trees, restores and installs are refused if they would leave less free space than this.",
+      "default": 50,
+      "min": 1,
+      "max": 2000
+    },
+    "integration": {
+      "type": "string",
+      "title": "Integration",
+      "description": "Optional: repo-map imports repositories from a Markdown table (set its path with `wsp init --repo-map FILE`).",
+      "default": "none",
+      "options": [
+        "none",
+        "repo-map"
+      ]
+    }
+  }
+}

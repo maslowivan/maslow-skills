@@ -1,0 +1,55 @@
+{
+  "description": "Route Claude Code worktrees through wsp for configured repositories",
+  "hooks": {
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/wsp",
+            "args": ["hook", "claude", "worktree-create"],
+            "timeout": 600,
+            "statusMessage": "Preparing task worktree"
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/wsp",
+            "args": ["hook", "claude", "worktree-remove"],
+            "timeout": 600,
+            "statusMessage": "Saving task worktree"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/wsp",
+            "args": ["hook", "claude", "session-start"],
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/wsp",
+            "args": ["hook", "claude", "session-end"],
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

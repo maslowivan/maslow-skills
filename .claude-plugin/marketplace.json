@@ -1,0 +1,15 @@
+{
+  "name": "maslow-worktree-skill",
+  "description": "Task Workspaces: isolated multi-repository worktrees per task for Claude Code and Codex.",
+  "owner": {
+    "name": "maslowivan",
+    "url": "https://github.com/maslowivan"
+  },
+  "plugins": [
+    {
+      "name": "task-workspaces",
+      "source": "./",
+      "description": "Isolated multi-repository worktrees per task: absolute paths, dependency reuse via copy-on-write clones, checkpoints before cleanup and restore of removed folders."
+    }
+  ]
+}

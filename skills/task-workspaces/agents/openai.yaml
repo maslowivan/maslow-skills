@@ -1,0 +1,4 @@
+interface:
+  display_name: "Task Workspaces"
+  short_description: "Isolated multi-repo worktrees per task with checkpoints and restore"
+  default_prompt: "Use $task-workspaces to prepare isolated worktrees for this task and report their absolute paths."
