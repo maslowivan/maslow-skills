@@ -86,7 +86,20 @@ by people:
 ```
 
 Build it with **`/task-workspaces:setup-sparse-checkout [folder]`** in Claude
-Code (`$setup-sparse-checkout` in Codex), or `wsp sparse scan --write`. The scan
+Code, **`$setup-sparse-checkout`** in Codex (or pick it from `/skills`), or
+`wsp sparse scan --write`.
+
+> **Recommended: run it once in every repository.** Besides smaller task trees,
+> `.wsp/SC-PROFILES.md` is a compact index of the project — every subproject with
+> a few-word brief, the folders it depends on and the domains it serves — that
+> any AI agent (or new teammate) can read to understand the structure quickly.
+> The command does not touch your `AGENTS.md`/`CLAUDE.md`; if you want agents to
+> find the index without the skill, add a line yourself, for example:
+>
+> ```markdown
+> Project map: `.wsp/SC-PROFILES.md` lists every subproject with a short brief,
+> its folders and domains — read it first to find where a change belongs.
+> ``` The scan
 finds every subproject (a folder with `package.json`, `pyproject.toml`,
 `go.mod`, `wrangler*`, ...; hidden tooling folders like `.claude` are not
 subprojects but are included in every profile), follows its `../` references
@@ -211,7 +224,7 @@ the last run.
 | Skill (`ensure`, `run`, `evict`, `close`, ...) | ✓ | ✓ |
 | Session identity | `CODEX_THREAD_ID` | `CLAUDE_CODE_SESSION_ID` |
 | CLI | `python3 <skill>/scripts/wsp.py` | `wsp` on PATH (plugin `bin/`) |
-| Sparse profiles, `setup-sparse-checkout` skill | ✓ `$setup-sparse-checkout` | ✓ `/task-workspaces:setup-sparse-checkout` |
+| Sparse profiles, `setup-sparse-checkout` skill | ✓ `$setup-sparse-checkout` or `/skills` | ✓ `/task-workspaces:setup-sparse-checkout` |
 | Built-in `--worktree` routed through wsp | — | ✓ `WorktreeCreate`/`WorktreeRemove` hooks |
 | Session start/end: context and lease release | — | ✓ `SessionStart`/`SessionEnd` hooks |
 | Settings dialog when enabling | — (`wsp init`) | ✓ `userConfig` |

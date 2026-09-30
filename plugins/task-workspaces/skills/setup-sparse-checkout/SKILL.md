@@ -54,7 +54,12 @@ you parse the output.
    - that tasks use a profile with `wsp ensure --task <id> --repo <repo> --profile <name>`,
      and the task-workspaces skill picks profiles by name, brief and tags;
    - that the file should be committed so teammates and task bases use it
-     (until then wsp falls back to the working copy).
+     (until then wsp falls back to the working copy);
+   - that the file doubles as a compact project index any agent can read to
+     understand the structure quickly, and that they may reference it from the
+     repository's `AGENTS.md` / `CLAUDE.md` (e.g. "Project map: `.wsp/SC-PROFILES.md`
+     lists every subproject with a short brief, its folders and domains"). Offer
+     the line, but do not edit those files unless the user asks.
 
 A file written by version 0.2 in the repository root (`SC-PROFILES.md`) is moved to
 `.wsp/` by `--write`; add `--rebuild` once to regenerate its generated parts.
