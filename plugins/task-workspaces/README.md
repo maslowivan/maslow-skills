@@ -1,7 +1,41 @@
 # task-workspaces (`wsp`)
 
-Isolated Git worktrees per task, across one or more repositories, for Codex,
-Claude Code and humans at the command line.
+A powerful alternative to the built-in worktrees of **Codex** and **Claude Code**:
+isolated Git worktrees per task, across one or more repositories, that are fast
+to prepare, easy on your SSD and fully under your control.
+
+## Why use it instead of built-in worktrees
+
+1. **Faster to a working tree.** A fresh built-in worktree has no dependencies,
+   so every task starts with a full `npm`/`yarn`/`pnpm` install. `wsp` keeps a
+   verified install per lockfile and hands it to the next task as a
+   copy-on-write clone (APFS clonefile, btrfs/xfs reflink): a second task with the
+   same lockfile skips the install entirely. Only the packages the task needs are
+   prepared, even in a monorepo with a lockfile per service.
+2. **Easy on your SSD.** Clones share blocks with the cached install, so ten
+   trees with the same `node_modules` do not take ten times the space. Disk use is
+   accounted and limited: a free-space reserve, quotas and a tree limit stop growth
+   before the disk fills up. Trees that are no longer in use are removed by policy
+   — paused and finished tasks by the optional background janitor, clean trees
+   when a Claude Code session ends, or any task with one command — and unpublished
+   work is always checkpointed first, so a removed tree can be restored.
+3. **Many repositories from one project and one chat.** Built-in worktrees belong
+   to the repository the chat is opened in. With `wsp` a single orchestrating
+   project (say, `my-example-workflow`) can give one task isolated trees in
+   `my-example-frontend` and `my-example-backend` at the same time, without
+   opening a new thread per repository. One chat can also run several tasks.
+4. **Native on macOS, works on Linux.** Built for macOS (APFS clonefile, Time
+   Machine and Spotlight exclusions, launchd janitor); Linux is supported and
+   tested in CI (reflink on btrfs/xfs, otherwise a normal install per tree).
+   Windows is not supported yet.
+5. **Safe and transparent.** You decide where trees, the dependency cache and
+   checkpoints live. Trees are ordinary folders at predictable paths
+   (`<worktrees_root>/<task>/<repo>`): open them, edit a file, or remove a task
+   with `wsp evict` / `wsp close`. `wsp` never touches other tools' worktrees,
+   never deletes work that exists only locally without your confirmation, and
+   keeps secrets out of its checkpoints.
+
+## Features
 
 - one task → one tree per repository, own branch, fresh base, no upstream to main
 - absolute paths from `wsp ensure`; resume always goes through `ensure`
@@ -17,8 +51,8 @@ Claude Code and humans at the command line.
   company-specific in the code — all paths and repositories come from your config;
   optional import of repositories from a Markdown table (`--repo-map`)
 
-Python 3.11+ standard library and Git 2.38+. macOS fully, Linux without
-clonefile (reflink or install), Windows not supported.
+Python 3.11+ standard library and Git 2.38+. macOS (native), Linux (reflink or a
+normal install per tree). Windows is not supported yet.
 
 ## Layout
 

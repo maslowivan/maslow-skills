@@ -1,6 +1,6 @@
 ---
 name: task-workspaces
-description: Give every coding task its own isolated worktrees in one or more repositories, with current absolute paths, dependency reuse, checkpoints before cleanup and restore of removed folders. Use when starting, resuming, pausing or finishing implementation work in a Git repository, when the user asks where a task's code lives, how much disk the task folders take, or to clean up or restore task folders. Not for read-only research.
+description: Give every coding task its own isolated worktrees in one or more repositories, with current absolute paths, dependency reuse, checkpoints before cleanup and restore of removed folders. Use instead of the built-in Codex or Claude Code worktree feature when starting, resuming, pausing or finishing implementation work in one or more Git repositories, when the user asks where a task's code lives, how much disk the task folders take, or to clean up or restore task folders. Not for read-only research.
 ---
 
 # Task workspaces (`wsp`)
