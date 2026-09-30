@@ -62,6 +62,8 @@ def _render_list(data):
         for t in task["trees"]:
             lease = ",".join(t["leases"]) or "-"
             lines.append(f"    {t['repo']:24} {t['state']:10} {t['size']:>10}  lease {lease}  {t['path']}")
+    if data.get("hidden_finished_tasks"):
+        lines.append(f"({data['hidden_finished_tasks']} finished tasks without trees hidden; --all shows them)")
     dk = data["disk"]
     lines.append(f"Disk: {dk['free']} free ({dk['level']}); manager {dk['usage_human']['total']}; "
                  f"{dk['tasks_with_trees']} tasks / {dk['trees_on_disk']} trees on disk; measured {dk['measured_at']}")
@@ -174,7 +176,7 @@ def cmd_attach(args):
 
 def cmd_list(args):
     ctx = _ctx(args)
-    _print(args, workspace.list_all(ctx), _render_list)
+    _print(args, workspace.list_all(ctx, show_all=args.all), _render_list)
     return 0
 
 
@@ -412,7 +414,8 @@ def build_parser():
     sp.add_argument("--app")
     sp.add_argument("--session")
     sp.add_argument("--role", default="owner", choices=["owner", "observer"])
-    add("list", cmd_list, "tasks, trees, owners, sizes, disk")
+    sp = add("list", cmd_list, "tasks, trees, owners, sizes, disk")
+    sp.add_argument("--all", action="store_true", help="also show finished tasks without trees")
     sp = add("status", cmd_status, "paths, leases, git state, checkpoints of a task")
     sp.add_argument("--task", required=True)
     sp = add("run", cmd_run, "run a command in a task tree under a lease")

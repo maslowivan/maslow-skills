@@ -5,6 +5,11 @@ plugin bumps `version` in both `.claude-plugin/plugin.json` and
 `.codex-plugin/plugin.json` and adds a section here; CI enforces it and tags the
 release as `task-workspaces-v<version>`.
 
+## 0.3.1 — 2026-09-30
+
+- **Changed:** `wsp list` hides finished (completed/cancelled) tasks that no longer
+  have a tree and says how many were hidden; `wsp list --all` shows them.
+
 ## 0.3.0 — 2026-09-30
 
 Sparse profiles, reworked after the first real repositories.

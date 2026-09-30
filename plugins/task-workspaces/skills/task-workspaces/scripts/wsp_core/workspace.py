@@ -648,11 +648,17 @@ def status(ctx, task_id):
             "set_manifest": set_manifest if os.path.exists(set_manifest) else None}
 
 
-def list_all(ctx):
+def list_all(ctx, show_all=False):
+    """Tasks with their trees. Finished tasks (completed/cancelled) that no longer have a tree
+    are history and hidden unless show_all."""
     tasks = []
+    hidden = 0
     for task in ctx.reg.list_tasks():
         trees = ctx.reg.trees_for_task(task["id"])
         trees = [reconcile(ctx, t) for t in trees]
+        if not show_all and task["status"] in ("completed", "cancelled") and not trees:
+            hidden += 1
+            continue
         tasks.append({
             "id": task["id"], "title": task["title"], "status": task["status"], "pinned": bool(task["pinned"]),
             "trees": [{"repo": t["repo"], "state": t["state"], "path": t["path"], "branch": t["branch"],
@@ -660,7 +666,7 @@ def list_all(ctx):
                        "leases": [l["holder"] for l in ctx.reg.active_leases(t["id"])]} for t in trees],
             "sessions": [s["holder"] for s in ctx.reg.sessions_for_task(task["id"])],
         })
-    return {"tasks": tasks, "disk": disk.summary(ctx.cfg, ctx.reg),
+    return {"tasks": tasks, "hidden_finished_tasks": hidden, "disk": disk.summary(ctx.cfg, ctx.reg),
             "running_operations": ctx.reg.running_operations()}
 
 

@@ -263,6 +263,16 @@ class CloseTests(Sandbox):
         self.assertNotEqual(self.git(self.canon["app"], "show-ref", "--verify", "refs/heads/wsp/sq",
                                      check=False).returncode, 0)
 
+    def test_list_hides_finished_tasks_without_trees(self):
+        self.ensure("done-task")
+        self.ensure("live-task")
+        self.wsp("close", "--task", "done-task", "--holder", "cli:test")
+        listing = self.wsp("list")
+        self.assertEqual([t["id"] for t in listing["tasks"]], ["live-task"])
+        self.assertEqual(listing["hidden_finished_tasks"], 1)
+        everything = self.wsp("list", "--all")
+        self.assertEqual(sorted(t["id"] for t in everything["tasks"]), ["done-task", "live-task"])
+
     def test_discard_after_confirmation(self):
         path = self.ensure("disc")["trees"][0]["path"]
         self.write(os.path.join(path, "x.txt"), "x\n")
