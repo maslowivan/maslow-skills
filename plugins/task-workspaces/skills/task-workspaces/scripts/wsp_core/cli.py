@@ -5,9 +5,39 @@ import json
 import os
 import sys
 
-from . import __version__, config as config_mod, deps, doctor, hooks, init_wizard, inventory, janitor, sparse, util, workspace
+import importlib
+
+from . import __version__, config as config_mod, util
 from .errors import WspError
-from .registry import Registry
+
+
+class _Lazy:
+    """Import a wsp_core module on first use: most commands need only a few modules,
+    and importing everything up front doubled the start-up time."""
+
+    def __init__(self, name):
+        self._name = name
+        self._module = None
+
+    def __getattr__(self, attr):
+        if self._module is None:
+            self._module = importlib.import_module(f"{__package__}.{self._name}")
+        return getattr(self._module, attr)
+
+
+deps = _Lazy("deps")
+doctor = _Lazy("doctor")
+hooks = _Lazy("hooks")
+init_wizard = _Lazy("init_wizard")
+inventory = _Lazy("inventory")
+janitor = _Lazy("janitor")
+sparse = _Lazy("sparse")
+workspace = _Lazy("workspace")
+_registry = _Lazy("registry")
+
+
+def Registry(path):  # noqa: N802 - keeps call sites unchanged
+    return _registry.Registry(path)
 
 
 def _ctx(args, require=True):

@@ -14,7 +14,7 @@ def run(cfg, reg=None):
     def add(name, ok, detail=None, level="error"):
         checks.append({"check": name, "ok": bool(ok), "level": "ok" if ok else level, "detail": detail})
 
-    add("python>=3.11", sys.version_info >= (3, 11), platform.python_version())
+    add("python>=3.9", sys.version_info >= (3, 9), platform.python_version())
     gv = gitutil.version()
     add("git>=2.38 (merge-tree --write-tree)", gv >= (2, 38, 0), ".".join(map(str, gv)))
     add("lsof available", shutil.which("lsof") is not None, None)

@@ -135,8 +135,9 @@ use the same profiles. Details: [references/sparse.md](skills/task-workspaces/re
   company-specific in the code — all paths and repositories come from your config;
   optional import of repositories from a Markdown table (`--repo-map`)
 
-Python 3.11+ standard library and Git 2.38+. macOS (native), Linux (reflink or a
-normal install per tree). Windows is not supported yet.
+Python 3.9+ (standard library only — the macOS system `/usr/bin/python3` from the
+Command Line Tools is enough, nothing to install) and Git 2.38+. macOS (native),
+Linux (reflink or a normal install per tree). Windows is not supported yet.
 
 ## Layout
 

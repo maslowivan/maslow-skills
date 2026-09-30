@@ -4,8 +4,8 @@
 import os
 import sys
 
-if sys.version_info < (3, 11):
-    sys.stderr.write("wsp requires Python 3.11 or newer\n")
+if sys.version_info < (3, 9):
+    sys.stderr.write("wsp requires Python 3.9 or newer (macOS: /usr/bin/python3 from the Command Line Tools)\n")
     sys.exit(71)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

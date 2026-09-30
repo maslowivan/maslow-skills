@@ -5,6 +5,13 @@ plugin bumps `version` in both `.claude-plugin/plugin.json` and
 `.codex-plugin/plugin.json` and adds a section here; CI enforces it and tags the
 release as `task-workspaces-v<version>`.
 
+## 0.5.0 — 2026-09-30
+
+- **Changed:** requires Python 3.9+ instead of 3.11+, so the macOS system
+  `/usr/bin/python3` (Command Line Tools) runs `wsp` with nothing to install. The
+  whole test suite runs on 3.9 and 3.13 in CI, including the macOS system Python.
+- **Changed:** the CLI imports its modules on first use (faster start).
+
 ## 0.4.4 — 2026-09-30
 
 - **Docs:** fix the README blockquote that swallowed the next paragraph on GitHub.

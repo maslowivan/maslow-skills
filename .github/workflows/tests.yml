@@ -31,12 +31,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
-        python: ["3.11", "3.13"]
+        include:
+          # the oldest supported Python, and the macOS system one (/usr/bin/python3 from the
+          # Command Line Tools) that colleagues without Homebrew Python have
+          - { os: ubuntu-latest, python: "3.9" }
+          - { os: ubuntu-latest, python: "3.13" }
+          - { os: macos-latest, python: "system" }
+          - { os: macos-latest, python: "3.13" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
+        if: matrix.python != 'system'
         with:
           python-version: ${{ matrix.python }}
       - name: Install lsof (Linux)
@@ -45,10 +51,13 @@ jobs:
       - name: Run tests of every plugin that has them
         run: |
           set -e
+          PY=python
+          if [ "${{ matrix.python }}" = "system" ]; then PY=/usr/bin/python3; fi
+          $PY --version
           for dir in plugins/*/; do
             if [ -d "$dir/tests" ]; then
               echo "::group::$dir"
-              (cd "$dir" && python -m unittest discover -s tests -v)
+              (cd "$dir" && $PY -m unittest discover -s tests -v)
               echo "::endgroup::"
             fi
           done

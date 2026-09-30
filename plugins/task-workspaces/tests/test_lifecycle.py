@@ -81,7 +81,7 @@ class EnsureTests(Sandbox):
             self.assertEqual(err["error"]["code"], "INVALID_ID", bad)
 
     def test_parallel_ensure_same_task(self):
-        cmd = ["python3", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        cmd = [sys.executable, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                        "skills", "task-workspaces", "scripts", "wsp.py"),
                "ensure", "--task", "par", "--repo", "app", "--holder", "cli:test", "--json"]
         procs = [subprocess.Popen(cmd, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE) for _ in range(3)]

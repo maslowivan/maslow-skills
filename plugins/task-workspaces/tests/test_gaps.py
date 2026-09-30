@@ -114,7 +114,7 @@ class RunBudgetTests(Sandbox):
                   "time.sleep(30)\n")
         started = time.monotonic()
         err = self.wsp("run", "--task", "budget", "--repo", "app", "--holder", "cli:test",
-                       "--max-growth-gib", "0.01", "--", "python3", "-c", script,
+                       "--max-growth-gib", "0.01", "--", sys.executable, "-c", script,
                        ok=False, env={"WSP_RUN_POLL_SECONDS": "0.3"})
         self.assertLess(time.monotonic() - started, 25)
         self.assertEqual(err["error"]["code"], "DISK_LOW")

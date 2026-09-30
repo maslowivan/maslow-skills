@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -106,7 +107,7 @@ class Sandbox(unittest.TestCase):
         if not raw:
             cut = args.index("--") if "--" in args else len(args)
             args.insert(cut, "--json")
-        proc = sh(["python3", WSP, *args], env=run_env, check=False, input=input)
+        proc = sh([sys.executable, WSP, *args], env=run_env, check=False, input=input)
         if raw:
             return proc
         try:
