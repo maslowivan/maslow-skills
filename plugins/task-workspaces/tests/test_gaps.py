@@ -171,8 +171,15 @@ class OnUseJanitorTests(Sandbox):
         path = self._pause_and_age("idle-task")
         self.wsp("list", env={"WSP_NO_JANITOR": ""})
         self.assertTrue(self._wait_gone(path), "paused task was not evicted in the background")
-        with open(os.path.join(self.state_dir, "janitor-last-run.json")) as fh:
-            last = json.load(fh)
+        last_file = os.path.join(self.state_dir, "janitor-last-run.json")
+        deadline = time.monotonic() + 30
+        last = {}
+        while time.monotonic() < deadline:  # the run records its result after the eviction finishes
+            with open(last_file) as fh:
+                last = json.load(fh)
+            if "actions" in last:
+                break
+            time.sleep(0.3)
         self.assertEqual(last["trigger"], "on-use")
         self.assertIn("evict", last["actions"])
         restored = self.ensure("idle-task")  # restorable with the unpublished file
