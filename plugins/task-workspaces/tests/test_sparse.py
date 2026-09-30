@@ -9,6 +9,8 @@ from helpers import ROOT, Sandbox  # noqa: E402
 sys.path.insert(0, os.path.join(ROOT, "skills", "task-workspaces", "scripts"))
 from wsp_core import sparse  # noqa: E402
 
+PROFILES = os.path.join(".wsp", "SC-PROFILES.md")
+
 
 class SparseSandbox(Sandbox):
     repos = ("mono",)
@@ -23,65 +25,116 @@ class SparseSandbox(Sandbox):
         w(os.path.join(c, "apps/web/yarn.lock"), "# lock\n")
         w(os.path.join(c, "apps/web/src/index.ts"), 'import { button } from "../../../shared/ui/button";\n')
         w(os.path.join(c, "apps/web/.env.example"), "X=\n")
-        # packages/utils: a workspace package referenced by name
+        # packages/utils: a workspace package referenced by name; no routes, docs mention hosts
         w(os.path.join(c, "packages/utils/package.json"), json.dumps({"name": "@acme/utils"}))
         w(os.path.join(c, "packages/utils/index.ts"), "export const u = 1;\n")
+        w(os.path.join(c, "packages/utils/README.md"),
+          "Docs at https://utils.acme.dev and https://www.acme.dev; company site https://acme.dev\n")
         # shared: imports libs (followed), its test mentions services (not followed)
         w(os.path.join(c, "shared/ui/button.ts"), 'import { x } from "../../libs/core/x";\nexport const button = x;\n')
         w(os.path.join(c, "shared/ui/button.test.ts"), 'import { api } from "../../services/api/src/main";\n')
         w(os.path.join(c, "libs/core/x.ts"), "export const x = 1;\n")
-        # services/api: a worker with routes and docs
-        w(os.path.join(c, "services/api/package.json"), json.dumps({"name": "api-worker"}))
+        # services/api: a worker with routes in a per-environment wrangler file, and docs
+        w(os.path.join(c, "services/api/package.json"), json.dumps(
+            {"name": "api-worker", "description": "Public REST API for the shop"}))
         w(os.path.join(c, "services/api/package-lock.json"), "{}\n")
-        w(os.path.join(c, "services/api/wrangler.jsonc"), json.dumps({
-            "name": "acme-api", "routes": [{"pattern": "api.acme.dev/*", "custom_domain": True}],
-            "vars": {"UPSTREAM_URL": "https://upstream.vendor.io"}}, indent=2))
+        w(os.path.join(c, "services/api/wrangler.production.jsonc"), "\n".join([
+            '{', '  "name": "acme-api",', '  "routes": [',
+            '    { "pattern": "api.acme.dev/*", "zone_name": "acme.dev" },',
+            '    { "pattern": "api-staging.acme.dev", "custom_domain": true },',
+            '    { "pattern": "www.api.acme.io", "custom_domain": true },',
+            '    { "pattern": "api.acme.io", "custom_domain": true }',
+            '    // { "pattern": "old.acme.dev", "custom_domain": true }',
+            '  ],', '  "vars": { "UPSTREAM_URL": "https://upstream.vendor.io" }', '}']))
         w(os.path.join(c, "services/api/README.md"),
-          "Served at https://api.acme.dev and https://status.acme.dev; built with https://vitejs.dev\n"
+          "Served at https://api.acme.dev, see also https://status.acme.dev; built with https://vitejs.dev\n"
           "Code lives in lib.rs, schema.sql and Button.svelte; see docs.acme.dev\n")
         w(os.path.join(c, "services/api/src/main.ts"), "export const api = 1;\n")
+        # agent tooling in the repository root: not subprojects, included in every profile
+        w(os.path.join(c, ".claude/skills/review/SKILL.md"), "# review\n")
+        w(os.path.join(c, ".claude/mcp/tool/package.json"), json.dumps({"name": "mcp-tool"}))
         self.git(c, "add", "-A")
         self.git(c, "commit", "-q", "-m", "monorepo")
+        for i in range(2):  # services/api is the most active subproject
+            w(os.path.join(c, f"services/api/src/change{i}.ts"), f"export const c{i} = {i};\n")
+            self.git(c, "add", "-A")
+            self.git(c, "commit", "-q", "-m", f"api change {i}")
         self.git(c, "push", "-q", "origin", "main")
+
+    def profiles_file(self):
+        return os.path.join(self.canon["mono"], PROFILES)
 
 
 class ScanTests(SparseSandbox):
     def test_scan_detects_subprojects_folders_and_domains(self):
         res = self.wsp("sparse", "scan", self.canon["mono"])
         profiles = res["profiles"]
-        self.assertEqual(sorted(profiles), ["api", "utils", "web"])
+        self.assertEqual(list(profiles), ["api", "web", "utils"])  # most recent commits first, then by path
         web = profiles["web"]
         self.assertEqual(web["folders"][0], "apps/web")
         self.assertIn("shared", web["folders"])          # ../../../shared/ui/button -> whole shared
         self.assertIn("libs", web["folders"])            # followed from shared; included whole
         self.assertIn("packages/utils", web["folders"])  # workspace dependency by package name
+        self.assertIn(".claude", web["folders"])         # agent tooling goes into every profile
         self.assertNotIn("services/api", web["folders"])  # only a test in shared mentions it
+        self.assertNotIn("tool", profiles)               # .claude/mcp/tool is not a subproject
         api = profiles["api"]
-        self.assertIn("api.acme.dev", api["tags"])
-        self.assertIn("status.acme.dev", api["tags"])     # README host of the repo's own domain
-        self.assertIn("acme-api", api["tags"])            # worker name
-        self.assertNotIn("upstream.vendor.io", api["tags"])  # vars are not where the service is served
-        self.assertNotIn("vitejs.dev", api["tags"])
-        for filename in ("lib.rs", "schema.sql", "button.svelte"):   # file names are not hosts
-            self.assertNotIn(filename, api["tags"])
-        self.assertIn("docs.acme.dev", api["tags"])      # bare host of the repo's own domain
-        self.assertFalse(os.path.exists(os.path.join(self.canon["mono"], "SC-PROFILES.md")))  # preview only
+        self.assertEqual(api["about"], "Public REST API for the shop")
+        # not: the profile name, the zone, staging variant, www duplicate, commented route,
+        # vars, doc hosts (api has routes), library links or file names
+        self.assertEqual(api["tags"], ["api-worker", "acme-api", "api.acme.dev", "api.acme.io"])
+        utils = profiles["utils"]
+        self.assertIn("utils.acme.dev", utils["tags"])   # no routes -> specific doc hosts only
+        self.assertNotIn("acme.dev", utils["tags"])
+        self.assertNotIn("www.acme.dev", utils["tags"])
+        self.assertFalse(os.path.exists(self.profiles_file()))  # preview only
 
-    def test_rescan_keeps_user_edits(self):
+    def test_file_lives_in_wsp_folder_and_legacy_root_file_moves(self):
+        legacy = os.path.join(self.canon["mono"], "SC-PROFILES.md")
         self.wsp("sparse", "scan", self.canon["mono"], "--write")
-        path = os.path.join(self.canon["mono"], "SC-PROFILES.md")
-        with open(path) as fh:
-            text = fh.read()
-        text = text.replace("- tags: api,", "- tags: api, payments-team,")
-        text += "\n## docs-only\n\n- folders: `docs`\n- tags: documentation\n"
-        with open(path, "w") as fh:
-            fh.write(text)
+        self.assertTrue(os.path.isfile(self.profiles_file()))
+        os.replace(self.profiles_file(), legacy)          # a file written by an older version
+        self.assertIn("api", sparse.load(self.canon["mono"]))  # still read from the root
         res = self.wsp("sparse", "scan", self.canon["mono"], "--write")
-        self.assertIn("payments-team", res["profiles"]["api"]["tags"])
+        self.assertEqual(res["moved_from"], "SC-PROFILES.md")
+        self.assertTrue(os.path.isfile(self.profiles_file()))
+        self.assertFalse(os.path.exists(legacy))
+
+    def test_rescan_keeps_user_edits_and_drops_stale_generated_items(self):
+        self.wsp("sparse", "scan", self.canon["mono"], "--write")
+        with open(self.profiles_file()) as fh:
+            text = fh.read()
+        self.assertIn("<!-- wsp:auto", text)
+        text = text.replace("- tags: api-worker, acme-api,", "- tags: API Worker, acme-api, payments-team,")
+        text = text.replace("- about: Public REST API for the shop", "- about: Checkout and payments API")
+        text += "\n## docs-only\n\n- folders: `docs`\n- tags: documentation\n"
+        with open(self.profiles_file(), "w") as fh:
+            fh.write(text)
+        wrangler = os.path.join(self.canon["mono"], "services/api/wrangler.production.jsonc")
+        with open(wrangler) as fh:
+            config = fh.read()
+        with open(wrangler, "w") as fh:  # the route to api.acme.io is replaced
+            fh.write(config.replace("api.acme.io", "api.acme.net"))
+        res = self.wsp("sparse", "scan", self.canon["mono"], "--write")
+        api = res["profiles"]["api"]
+        self.assertIn("payments-team", api["tags"])          # user tag kept
+        self.assertIn("API Worker", api["tags"])             # user spelling kept
+        self.assertNotIn("api-worker", api["tags"])
+        self.assertIn("api.acme.net", api["tags"])           # new route
+        self.assertNotIn("api.acme.io", api["tags"])         # stale generated tag dropped
+        self.assertEqual(api["about"], "Checkout and payments API")  # user about wins
         self.assertIn("docs-only", res["profiles"])
         self.assertEqual(res["report"]["kept_manual"], ["docs-only"])
-        parsed = sparse.load(self.canon["mono"])
-        self.assertEqual(parsed["docs-only"]["folders"], ["docs"])
+        self.assertFalse(self.wsp("sparse", "scan", self.canon["mono"])["changed"])  # stable
+
+    def test_rebuild_regenerates_files_without_markers(self):
+        os.makedirs(os.path.dirname(self.profiles_file()), exist_ok=True)
+        with open(self.profiles_file(), "w") as fh:
+            fh.write("## api\n\n- path: `services/api`\n- folders: `services/api`\n- tags: old.acme.dev\n")
+        kept = self.wsp("sparse", "scan", self.canon["mono"])
+        self.assertIn("old.acme.dev", kept["profiles"]["api"]["tags"])   # unknown origin: treated as manual
+        rebuilt = self.wsp("sparse", "scan", self.canon["mono"], "--rebuild")
+        self.assertNotIn("old.acme.dev", rebuilt["profiles"]["api"]["tags"])
 
     def test_list_match_and_consumers(self):
         self.wsp("sparse", "scan", self.canon["mono"], "--write")
@@ -95,11 +148,24 @@ class ScanTests(SparseSandbox):
         self.assertEqual(consumers["profiles"], ["web"])
 
 
+class TagTests(unittest.TestCase):
+    def test_dedupe_prefers_readable_and_drops_profile_name(self):
+        self.assertEqual(sparse.dedupe_tags(["ugc-indexer", "UGC Indexer", "ugc.example.com"], drop=["api"]),
+                         ["UGC Indexer", "ugc.example.com"])
+        self.assertEqual(sparse.dedupe_tags(["api", "API", "api-worker"], drop=["api"]), ["api-worker"])
+
+    def test_prefer_public_hosts(self):
+        self.assertEqual(sparse._prefer_public(["www.shop.com", "shop.com", "shop-dev.acme.org", "ridestore.dev",
+                                                "x.cloudfront.net", "shop.com.pre-release.acme.org"]),
+                         ["shop.com", "ridestore.dev"])
+        self.assertEqual(sparse._prefer_public(["api-staging.acme.dev"]), ["api-staging.acme.dev"])
+
+
 class SparseTreeTests(SparseSandbox):
     def setUp(self):
         super().setUp()
         self.wsp("sparse", "scan", self.canon["mono"], "--write")
-        self.git(self.canon["mono"], "add", "SC-PROFILES.md")
+        self.git(self.canon["mono"], "add", ".wsp")
         self.git(self.canon["mono"], "commit", "-q", "-m", "profiles")
         self.git(self.canon["mono"], "push", "-q", "origin", "main")
 
@@ -121,6 +187,8 @@ class SparseTreeTests(SparseSandbox):
         self.assertIn("shared/ui/button.ts", files)
         self.assertIn("libs/core/x.ts", files)
         self.assertIn("README.md", files)                 # root files are always present
+        self.assertIn(PROFILES, files)                    # .wsp is always present
+        self.assertIn(".claude/skills/review/SKILL.md", files)
         self.assertNotIn("services/api/src/main.ts", files)
         self.assertEqual(self.git(path, "status", "--porcelain").stdout, "")
         # checkpoint -> evict -> restore keeps the sparse cone and the work

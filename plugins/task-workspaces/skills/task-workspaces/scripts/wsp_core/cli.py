@@ -292,7 +292,8 @@ def _render_sparse(data):
 def cmd_sparse(args):
     if args.action == "scan":
         target = util.expand(args.path or (args.query[0] if args.query else None) or os.getcwd())
-        result = sparse.scan_and_write(target, write=args.write)
+        result = sparse.scan_and_write(target, write=args.write, activity_days=args.activity_days,
+                                       rebuild=args.rebuild)
         if not args.details:
             result.pop("details", None)
         if args.json is False:
@@ -313,7 +314,7 @@ def cmd_sparse(args):
             profiles, _ = sparse.load_at(root, f"refs/remotes/origin/{default}")
         profiles = profiles if profiles is not None else sparse.load(root)
         if profiles is None:
-            raise WspError("SPARSE_PROFILE_UNKNOWN", f"{sparse.FILE_NAME} not found in {root}; "
+            raise WspError("SPARSE_PROFILE_UNKNOWN", f"{sparse.FILE_PATH} not found in {root}; "
                            "run `wsp sparse scan --write` there")
         if args.action == "list":
             _print(args, {"file": sparse.profiles_path(root), "profiles": profiles}, _render_sparse)
@@ -403,7 +404,7 @@ def build_parser():
     sp.add_argument("--reclone-source", action="store_true",
                     help="if the source checkout is gone, clone it from origin (only into a missing/empty path)")
     sp.add_argument("--profile", action="append", metavar="[REPO:]NAME",
-                    help="sparse checkout: only the folders of this SC-PROFILES.md profile (repeatable)")
+                    help="sparse checkout: only the folders of this .wsp/SC-PROFILES.md profile (repeatable)")
     sp.add_argument("--folder", action="append", metavar="[REPO:]FOLDER",
                     help="sparse checkout: add a folder to the profile's folders (repeatable)")
     sp = add("attach", cmd_attach, "record a verified task <-> chat/session link")
@@ -460,11 +461,14 @@ def build_parser():
     group.add_argument("--apply", action="store_true")
     sp = add("registry", cmd_registry, "registry maintenance")
     sp.add_argument("action", choices=["rebuild"])
-    sp = add("sparse", cmd_sparse, "sparse-checkout profiles (SC-PROFILES.md): scan, list, match, consumers, add")
+    sp = add("sparse", cmd_sparse, "sparse-checkout profiles (.wsp/SC-PROFILES.md): scan, list, match, consumers, add")
     sp.add_argument("action", choices=["scan", "list", "match", "consumers", "add"])
     sp.add_argument("query", nargs="*", help="scan: repository folder (default: current); match: words to look for")
-    sp.add_argument("--write", action="store_true", help="scan: write SC-PROFILES.md (default: preview only)")
+    sp.add_argument("--write", action="store_true", help="scan: write .wsp/SC-PROFILES.md (default: preview only)")
     sp.add_argument("--details", action="store_true", help="scan: include why each folder was added")
+    sp.add_argument("--activity-days", type=int, default=28, help="scan: window for ordering profiles by commits")
+    sp.add_argument("--rebuild", action="store_true",
+                    help="scan: regenerate profiles written before wsp:auto markers existed (drops their tags)")
     sp.add_argument("--repo", help="configured repository (list/match/consumers/add)")
     sp.add_argument("--path", help="repository folder instead of --repo")
     sp.add_argument("--task", help="add: task id")

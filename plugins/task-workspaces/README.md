@@ -20,7 +20,7 @@ stay fully under your control.
    folders it imports, instead of the whole repository (see
    [Sparse checkout](#sparse-checkout)). Codex worktrees have no sparse option;
    Claude Code has a single static `worktree.sparsePaths` list for every worktree.
-   `wsp` picks a profile per task from `SC-PROFILES.md`, which it builds for you.
+   `wsp` picks a profile per task from `.wsp/SC-PROFILES.md`, which it builds for you.
 3. **Easy on your SSD.** Clones share blocks with the cached install, so ten
    trees with the same `node_modules` do not take ten times the space. Disk use is
    accounted and limited: a free-space reserve, quotas and a tree limit stop growth
@@ -72,35 +72,41 @@ the repository root files — nothing else.
   time (`wsp sparse add`). Before changing shared code, `wsp sparse consumers`
   tells which other subprojects use it.
 
-**SC-PROFILES.md.** The profiles live in the repository root, one section per
-subproject, readable and editable by people:
+**.wsp/SC-PROFILES.md.** The profiles live in the repository's `.wsp/` folder,
+one section per subproject, most active subprojects first, readable and editable
+by people:
 
 ```markdown
 ## observability-hub
 
 - path: `apps/observability-hub`
-- folders: `apps/observability-hub`, `shared`, `libs/charts`
-- tags: observability-hub, @acme/hub, hub.acme.dev, dashboards
+- about: Internal ops dashboard: service health, releases, incidents
+- folders: `apps/observability-hub`, `.claude`, `shared`, `libs/charts`
+- tags: @acme/hub, hub.acme.dev, dashboards
 ```
 
 Build it with **`/task-workspaces:setup-sparse-checkout [folder]`** in Claude
 Code (`$setup-sparse-checkout` in Codex), or `wsp sparse scan --write`. The scan
 finds every subproject (a folder with `package.json`, `pyproject.toml`,
-`go.mod`, `wrangler.*`, ...), follows its `../` references and imports — a
-reference to even one file in `../web` includes all of `web` — and tags each
-profile with package and worker names and the domains it is served on (from
-`wrangler` routes and custom domains, `netlify.toml`, `vercel.json`, `CNAME`,
-framework `site` settings, and its README/AGENTS.md/CLAUDE.md).
+`go.mod`, `wrangler*`, ...; hidden tooling folders like `.claude` are not
+subprojects but are included in every profile), follows its `../` references
+and imports — a reference to even one file in `../web` includes all of `web` —
+and tags each profile with package and worker names and the domains it is
+actually served on (routes and custom domains; zones, vars, dev/staging variants
+and infrastructure hosts are left out). The setup skill then has the agent write
+the few-word `about` for each subproject from its AGENTS.md or README and add
+documented public domains. Profiles are ordered by commits in the last 4 weeks.
 
-**Edit it freely.** Add tags a subproject is missing (team, product, service or
-domain names the agent should match), add folders, or write your own profiles.
-A later scan keeps your additions. Commit the file so teammates and task bases
+**Edit it freely.** Fix a brief, add tags a subproject is missing (team,
+product, service or domain names the agent should match), add folders, or write
+your own profiles. A later scan keeps your additions (a hidden `wsp:auto` comment
+tracks what the scanner generated). Commit the file so teammates and task bases
 use the same profiles. Details: [references/sparse.md](skills/task-workspaces/references/sparse.md).
 
 ## Features
 
 - one task → one tree per repository, own branch, fresh base, no upstream to main
-- optional sparse checkout per subproject from `SC-PROFILES.md` (scan, match, widen, consumers)
+- optional sparse checkout per subproject from `.wsp/SC-PROFILES.md` (scan, match, widen, consumers)
 - absolute paths from `wsp ensure`; resume always goes through `ensure`
 - dependencies per package dir: copy-on-write clone of a verified install
   (APFS clonefile / reflink), never symlinks
@@ -122,9 +128,10 @@ normal install per tree). Windows is not supported yet.
 ```
 .codex-plugin/plugin.json         Codex plugin manifest
 .claude-plugin/plugin.json        Claude Code plugin manifest with userConfig
+CHANGELOG.md                      release notes per version
 hooks/hooks.json                  Claude Code hooks -> bin/wsp hook claude ...
 bin/wsp                           launcher (on PATH when the plugin is enabled)
-skills/setup-sparse-checkout/     skill that builds SC-PROFILES.md (/task-workspaces:setup-sparse-checkout)
+skills/setup-sparse-checkout/     skill that builds .wsp/SC-PROFILES.md (/task-workspaces:setup-sparse-checkout)
 skills/task-workspaces/
   SKILL.md                        agent workflow
   references/                     lifecycle, dependencies, sparse, configuration, claude-code, codex

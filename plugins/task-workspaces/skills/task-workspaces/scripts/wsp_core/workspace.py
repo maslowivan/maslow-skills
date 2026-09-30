@@ -289,7 +289,7 @@ def _sparse_info(tree):
 
 
 def _sparse_folders_for(src, rev, sparse_req):
-    """Resolve requested profiles (from SC-PROFILES.md at the base revision) and extra folders."""
+    """Resolve requested profiles (from .wsp/SC-PROFILES.md at the base revision) and extra folders."""
     if not sparse_req:
         return None, None, None
     names = sparse_req.get("profiles") or []

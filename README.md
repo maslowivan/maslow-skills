@@ -32,6 +32,18 @@ Update later with `claude plugin marketplace update maslow-skills` and
 `claude plugin update task-workspaces@maslow-skills`. Inside a session the same
 is available through `/plugin`.
 
+### Versions and updates
+
+Every plugin has a version in its manifests and a `CHANGELOG.md`; each release is
+tagged `<plugin>-v<version>` with [release notes](https://github.com/maslowivan/maslow-skills/releases).
+To get the latest versions:
+
+```sh
+codex plugin marketplace upgrade maslow-skills
+claude plugin marketplace update maslow-skills
+claude plugin update task-workspaces@maslow-skills
+```
+
 ### Only the skill, without a plugin
 
 Every skill is a plain folder at `plugins/<plugin>/skills/<skill>`; you can also
@@ -48,6 +60,7 @@ plugins/<plugin>/
   skills/<skill>/SKILL.md         the skill, shared by both agents
   hooks/, bin/, tests/            optional (hooks and bin/ are Claude Code features)
 scripts/validate.sh               checks both catalogs and all manifests
+scripts/check_versions.py         changed plugins must bump version + changelog (CI)
 ```
 
 ## Adding a plugin
@@ -61,7 +74,11 @@ scripts/validate.sh               checks both catalogs and all manifests
 3. If the plugin has `tests/`, CI runs them automatically.
 4. Run `scripts/validate.sh`.
 
-Bump `version` in both manifests for every release.
+**Releases.** Every change to a plugin must bump `version` in both manifests
+(semantic versioning) and add a `## <version>` section to the plugin's
+`CHANGELOG.md` — CI (`scripts/check_versions.py`) fails otherwise. When the change
+lands on `main`, CI tags it `<plugin>-v<version>` and publishes a GitHub release
+with the changelog section, so installed copies can be upgraded.
 
 ## License
 

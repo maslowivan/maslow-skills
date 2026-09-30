@@ -5,13 +5,27 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   catalog:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Validate marketplace catalog
+      - name: Validate marketplace catalogs
         run: sh scripts/validate.sh
+
+  versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Changed plugins bump their version and changelog
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          python3 scripts/check_versions.py "$base"
 
   plugins:
     strategy:
@@ -37,4 +51,40 @@ jobs:
               (cd "$dir" && python -m unittest discover -s tests -v)
               echo "::endgroup::"
             fi
+          done
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [catalog, versions, plugins]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Tag and release new plugin versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          for manifest in plugins/*/.claude-plugin/plugin.json; do
+            plugin=$(basename "$(dirname "$(dirname "$manifest")")")
+            version=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['version'])" "$manifest")
+            tag="$plugin-v$version"
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              continue
+            fi
+            notes=$(python3 - "$plugin" "$version" <<'EOF'
+          import re, sys
+          plugin, version = sys.argv[1], sys.argv[2]
+          try:
+              text = open(f"plugins/{plugin}/CHANGELOG.md").read()
+          except OSError:
+              print(f"{plugin} {version}"); sys.exit()
+          m = re.search(rf"^## {re.escape(version)}\b.*?$(.*?)(?=^## |\Z)", text, re.M | re.S)
+          print(m.group(1).strip() if m else f"{plugin} {version}")
+          EOF
+            )
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$plugin $version" --notes "$notes"
           done
