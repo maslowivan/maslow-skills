@@ -284,8 +284,8 @@ def cmd_janitor(args):
         _print(args, janitor.uninstall(cfg))
     elif args.action == "run":
         reg = Registry(cfg.registry_path)
-        result = workspace.gc(workspace.Ctx(cfg, reg), apply=bool(cfg.data["janitor"].get("enabled")))
-        janitor.record_run(cfg, result)
+        ctx = workspace.Ctx(cfg, reg)
+        result = janitor.run(cfg, reg, lambda apply: workspace.gc(ctx, apply=apply))
         _print(args, result)
     return 0
 
@@ -397,16 +397,33 @@ def build_parser():
     sp = add("hook", cmd_hook, "agent hook entry point (reads event JSON on stdin)")
     sp.add_argument("app", choices=["claude"])
     sp.add_argument("name", choices=["worktree-create", "worktree-remove", "session-start", "session-end"])
-    sp = add("janitor", cmd_janitor, "background cleanup: status, plist, install, uninstall, run")
+    sp = add("janitor", cmd_janitor, "cleanup policy runner: status, run, and the optional scheduled job "
+             "(plist, install, uninstall)")
     sp.add_argument("action", choices=["status", "plist", "install", "uninstall", "run"])
     return p
+
+
+# commands after which the on-use janitor may start a background cleanup run
+_JANITOR_TRIGGERS = {"ensure", "list", "status", "checkpoint", "release", "evict", "restore", "close", "run", "deps"}
+
+
+def _after_command(args):
+    if args.cmd not in _JANITOR_TRIGGERS:
+        return
+    try:
+        cfg = config_mod.Config.load(args.config)
+        janitor.maybe_run_on_use(cfg)
+    except Exception:
+        pass  # cleanup is best effort; never fail the user's command because of it
 
 
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        return args.fn(args) or 0
+        code = args.fn(args) or 0
+        _after_command(args)
+        return code
     except WspError as exc:
         if getattr(args, "json", False):
             json.dump({"ok": False, "error": exc.to_dict()}, sys.stdout, indent=2, ensure_ascii=False, default=str)

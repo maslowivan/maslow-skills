@@ -1,9 +1,16 @@
-"""Optional background janitor: a deterministic `wsp gc --apply` on a timer (no LLM).
+"""Janitor: runs the cleanup policy (`wsp gc --apply`) — deterministic, no LLM.
 
-launchd on macOS, systemd user timer on Linux. Installing it is a separate,
-explicit step (`wsp janitor install`); `wsp init` never installs it silently.
+Modes (config `janitor.mode`):
+  on-use     default. No service: when wsp is used (CLI commands, Claude Code hooks)
+             and the last run is older than `interval_minutes`, a detached background
+             process runs the policy. Nothing runs while wsp is not used — but then
+             nothing grows either.
+  scheduled  a launchd (macOS) / systemd user timer (Linux) job runs it on a timer,
+             also when wsp is idle. Installed only by `wsp janitor install`.
+  off        only `wsp gc --apply` run by hand.
 """
 
+import fcntl
 import os
 import platform
 import subprocess
@@ -48,8 +55,51 @@ def last_run_path(cfg):
     return os.path.join(cfg.state_dir, "janitor-last-run.json")
 
 
+def mode(cfg):
+    return cfg.data["janitor"].get("mode", "on-use")
+
+
+def due(cfg):
+    last = util.read_json(last_run_path(cfg)) or {}
+    stamp = last.get("started_at") or last.get("at")
+    age = util.age_hours(stamp)
+    return age is None or age * 60 >= float(cfg.data["janitor"].get("interval_minutes", 60))
+
+
+def maybe_run_on_use(cfg):
+    """Called after normal wsp usage. Spawns a detached cleanup run when due; never blocks."""
+    if os.environ.get("WSP_NO_JANITOR") or not cfg.exists or mode(cfg) != "on-use" or not due(cfg):
+        return False
+    # claim the slot first so parallel commands do not all spawn a run
+    util.write_json_atomic(last_run_path(cfg), {**(util.read_json(last_run_path(cfg)) or {}),
+                                                "started_at": util.now_iso(), "trigger": "on-use"})
+    log = os.path.join(cfg.state_dir, "logs", "janitor.log")
+    os.makedirs(os.path.dirname(log), exist_ok=True)
+    env = {**os.environ, "WSP_CONFIG": cfg.path, "WSP_NO_JANITOR": "1"}
+    with open(log, "a") as out:
+        subprocess.Popen(_wsp_command() + ["janitor", "run"], stdin=subprocess.DEVNULL, stdout=out, stderr=out,
+                         env=env, start_new_session=True, close_fds=True)
+    return True
+
+
+def run(cfg, reg, gc_fn):
+    """Run the policy once; a file lock makes concurrent runs a no-op."""
+    lock_path = os.path.join(cfg.state_dir, "locks", "janitor.lock")
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+    with open(lock_path, "a") as fh:
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return {"applied": False, "skipped": "another janitor run is in progress", "plan": []}
+        apply = mode(cfg) != "off"
+        result = gc_fn(apply=apply)
+        record_run(cfg, result)
+        return result
+
+
 def status(cfg):
-    info = {"enabled_in_config": bool(cfg.data["janitor"].get("enabled")), "last_run": util.read_json(last_run_path(cfg))}
+    info = {"mode": mode(cfg), "interval_minutes": cfg.data["janitor"].get("interval_minutes", 60),
+            "last_run": util.read_json(last_run_path(cfg)), "due": due(cfg)}
     if platform.system() == "Darwin":
         info["installed"] = os.path.exists(_plist_path())
         proc = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{LABEL}"], capture_output=True, text=True)
@@ -82,6 +132,9 @@ def uninstall(cfg):
 
 
 def record_run(cfg, result):
-    util.write_json_atomic(last_run_path(cfg), {"at": util.now_iso(), "applied": result.get("applied"),
+    previous = util.read_json(last_run_path(cfg)) or {}
+    util.write_json_atomic(last_run_path(cfg), {"started_at": previous.get("started_at") or util.now_iso(),
+                                                "at": util.now_iso(), "applied": result.get("applied"),
+                                                "trigger": previous.get("trigger"),
                                                 "actions": [p["action"] for p in result.get("plan", [])],
                                                 "free": result.get("disk", {}).get("free")})

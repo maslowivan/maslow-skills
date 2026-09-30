@@ -42,7 +42,11 @@ DEFAULTS = {
     },
     "agents": {"claude_hooks": False, "codex": False},
     "exclusions": {"time_machine": False, "spotlight": False},
-    "janitor": {"enabled": False, "interval_minutes": 60},
+    # Cleanup policy runner (`wsp gc --apply`):
+    #   on-use    - runs in the background while wsp is used, at most once per interval (default; no service)
+    #   scheduled - a launchd/systemd user job (`wsp janitor install`) runs it even when wsp is idle
+    #   off       - only when you run `wsp gc --apply` yourself
+    "janitor": {"mode": "on-use", "interval_minutes": 60},
     "repos": {},
 }
 
@@ -76,10 +80,12 @@ PLUGIN_OPTION_MAP = {
     "DEPENDENCY_STRATEGY": ("dependency_strategy",),
     "DISK_RESERVE_GIB": ("limits", "min_free_gib"),
     "INTEGRATION": ("integration",),
+    "CLEANUP_MODE": ("janitor", "mode"),
 }
 
 VALID_STRATEGIES = ("auto", "clone", "install", "none")
 VALID_INTEGRATIONS = ("none", "repo-map")
+VALID_JANITOR_MODES = ("on-use", "scheduled", "off")
 
 
 def strip_commands(shared):
@@ -148,6 +154,11 @@ class Config:
             raise WspError("CONFIG_INVALID", "invalid dependency_strategy", value=d["dependency_strategy"])
         if d["integration"] not in VALID_INTEGRATIONS:
             raise WspError("CONFIG_INVALID", "invalid integration", value=d["integration"])
+        janitor = d["janitor"]
+        if "mode" not in (self.raw.get("janitor") or {}) and "enabled" in (self.raw.get("janitor") or {}):
+            janitor["mode"] = "scheduled" if janitor.get("enabled") else "off"  # config written by v0.1
+        if janitor.get("mode") not in VALID_JANITOR_MODES:
+            raise WspError("CONFIG_INVALID", "invalid janitor.mode", value=janitor.get("mode"))
         for name in d["repos"]:
             util.validate_repo_name(name)
 
@@ -185,6 +196,8 @@ class Config:
             if keys == ("dependency_strategy",) and value not in VALID_STRATEGIES:
                 continue
             if keys == ("integration",) and value not in VALID_INTEGRATIONS:
+                continue
+            if keys == ("janitor", "mode") and value not in VALID_JANITOR_MODES:
                 continue
             current = self.data
             for key in keys:

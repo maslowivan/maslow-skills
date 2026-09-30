@@ -15,17 +15,19 @@ to prepare, easy on your SSD and fully under your control.
 2. **Easy on your SSD.** Clones share blocks with the cached install, so ten
    trees with the same `node_modules` do not take ten times the space. Disk use is
    accounted and limited: a free-space reserve, quotas and a tree limit stop growth
-   before the disk fills up. Trees that are no longer in use are removed by policy
-   — paused and finished tasks by the optional background janitor, clean trees
-   when a Claude Code session ends, or any task with one command — and unpublished
-   work is always checkpointed first, so a removed tree can be restored.
+   before the disk fills up. Trees that are no longer in use are removed
+   automatically: while you use `wsp` (or its Claude Code hooks), a background run
+   at most once an hour evicts paused and finished tasks — no system service
+   needed. Clean trees also go when a Claude Code session ends, and any task can be
+   removed with one command. Unpublished work is always checkpointed first, so a
+   removed tree can be restored.
 3. **Many repositories from one project and one chat.** Built-in worktrees belong
    to the repository the chat is opened in. With `wsp` a single orchestrating
    project (say, `my-example-workflow`) can give one task isolated trees in
    `my-example-frontend` and `my-example-backend` at the same time, without
    opening a new thread per repository. One chat can also run several tasks.
 4. **Native on macOS, works on Linux.** Built for macOS (APFS clonefile, Time
-   Machine and Spotlight exclusions, launchd janitor); Linux is supported and
+   Machine and Spotlight exclusions, optional launchd job); Linux is supported and
    tested in CI (reflink on btrfs/xfs, otherwise a normal install per tree).
    Windows is not supported yet.
 5. **Safe and transparent.** You decide where trees, the dependency cache and
@@ -111,8 +113,24 @@ and the CLI, so you configure once for both agents:
   `wsp init --detect --json`, asks you the few open questions and writes the config.
   You can also run `wsp init` yourself in a terminal.
 - **Claude Code** asks for the main options (worktrees folder, state folder,
-  dependency strategy, disk reserve) when the plugin is enabled; the rest comes
-  from the same `wsp init`.
+  dependency strategy, disk reserve, automatic cleanup) when the plugin is
+  enabled; the rest comes from the same `wsp init`.
+
+## Automatic cleanup
+
+The cleanup policy (`wsp gc`) evicts paused tasks after 24 hours and removes
+finished tasks whose work is on the remote; it never deletes unpublished work
+without your confirmation and never touches other tools' worktrees. How it runs
+is set by `janitor.mode`:
+
+| Mode | How it runs |
+| --- | --- |
+| `on-use` (default) | In the background whenever `wsp` or its Claude Code hooks are used, at most once per `interval_minutes` (60). No service, nothing to install. |
+| `scheduled` | A launchd (macOS) / systemd user (Linux) job, also when `wsp` is idle: `wsp janitor install`. |
+| `off` | Only when you run `wsp gc --apply`. |
+
+`wsp gc` shows what the policy would do; `wsp janitor status` shows the mode and
+the last run.
 
 ## Codex and Claude Code
 
@@ -141,6 +159,5 @@ directory with an isolated Git config; they never touch real repositories.
 ## Not in this version
 
 Sparse-checkout profiles, tracker UI, adoption of existing native worktrees,
-multiple writers per tree. Not verified yet: live runs inside Codex and Claude
-Code sessions, Linux. The background janitor is implemented but never installed
-automatically (`wsp janitor install`).
+multiple writers per tree, Windows. Tested in CI on macOS and Linux; live runs
+inside Codex and Claude Code sessions are still being piloted.

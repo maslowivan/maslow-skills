@@ -15,7 +15,7 @@ import os
 import sys
 import traceback
 
-from . import checkpoint, config as config_mod, gitutil, procs, util, workspace
+from . import checkpoint, config as config_mod, gitutil, janitor, procs, util, workspace
 from .errors import WspError
 from .registry import Registry
 
@@ -199,6 +199,12 @@ def dispatch(app, name, stdin=None, stdout=None):
     if app != "claude":
         raise WspError("USAGE", f"unsupported hook app {app}")
     event = _read_event(stdin)
+    if name in ("worktree-create", "session-start"):
+        try:
+            cfg = config_mod.Config.load()
+            janitor.maybe_run_on_use(cfg)
+        except Exception:
+            pass
     if name == "worktree-create":
         return worktree_create(event, stdout)
     if name == "worktree-remove":

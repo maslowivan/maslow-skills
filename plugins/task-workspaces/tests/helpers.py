@@ -37,6 +37,7 @@ class Sandbox(unittest.TestCase):
                                  "GIT_INDEX_FILE") and not k.startswith("CLAUDE_PLUGIN_OPTION_")}
         self.env.update({"GIT_CONFIG_GLOBAL": gitconfig, "GIT_CONFIG_NOSYSTEM": "1",
                          "WSP_CONFIG": os.path.join(self.tmp, "config", "config.json"),
+                         "WSP_NO_JANITOR": "1",  # background cleanup is tested explicitly
                          "HOME": os.environ.get("HOME", self.tmp)})
         self.origins, self.canon = {}, {}
         for name in self.repos:

@@ -30,7 +30,7 @@
   "policy": {"paused_evict_after_hours": 24, "stale_review_after_days": 7, "keep_checkpoints_per_tree": 2,
              "lease_stale_hours": 12},
   "exclusions": {"time_machine": true, "spotlight": true},
-  "janitor": {"enabled": false, "interval_minutes": 60},
+  "janitor": {"mode": "on-use", "interval_minutes": 60},
   "repos": {
     "my-app": {
       "path": "~/src/my-app",
@@ -50,6 +50,9 @@ Change values with `wsp config set limits.max_trees 20`, add repositories with
 - `dependency_cache_gib` — unused instances are dropped first; if still full, new installs are not cached.
 - `run_max_growth_gib` — default disk budget of one `wsp run` command (override with `--max-growth-gib`).
 - `lease_stale_hours` — after this without a heartbeat, `wsp gc` marks a lease `uncertain` (still protective).
+- `janitor.mode` — `on-use` (default): the cleanup policy runs in a detached background process after normal
+  wsp commands and Claude Code hooks, at most once per `interval_minutes`, no service; `scheduled`: a
+  launchd/systemd user job installed with `wsp janitor install`; `off`: only `wsp gc --apply` by hand.
 
 ## Repository profile
 
@@ -93,7 +96,7 @@ a Git URL becomes the origin. The file is only read.
 ## Claude Code plugin options
 
 When installed as a plugin, Claude Code asks for `worktrees_root`, `state_dir`,
-`dependency_strategy`, `disk_reserve_gib` and `integration` and exports them as
+`dependency_strategy`, `disk_reserve_gib`, `cleanup_mode` and `integration` and exports them as
 `CLAUDE_PLUGIN_OPTION_*`; the hooks copy changed values into `config.json`, so
 Codex and the CLI see the same settings.
 

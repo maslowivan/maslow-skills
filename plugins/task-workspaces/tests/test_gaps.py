@@ -145,5 +145,57 @@ class StaleLeaseTests(Sandbox):
         self.assertEqual(status["trees"][0]["leases"][0]["state"], "held")
 
 
+class OnUseJanitorTests(Sandbox):
+    repos = ("app",)
+
+    def _pause_and_age(self, task):
+        path = self.ensure(task)["trees"][0]["path"]
+        self.write(os.path.join(path, "wip.txt"), "wip\n")
+        self.wsp("release", "--task", task, "--holder", "cli:test", "--pause")
+        db = sqlite3.connect(os.path.join(self.state_dir, "registry.sqlite"))
+        db.execute("UPDATE tasks SET updated_at='2020-01-01T00:00:00+00:00' WHERE id=?", (task,))
+        db.commit()
+        db.close()
+        return path
+
+    def _wait_gone(self, path, seconds=30):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if not os.path.exists(path):
+                return True
+            time.sleep(0.3)
+        return False
+
+    def test_cleanup_runs_in_background_on_normal_use(self):
+        self.write_config(janitor={"mode": "on-use", "interval_minutes": 0})
+        path = self._pause_and_age("idle-task")
+        self.wsp("list", env={"WSP_NO_JANITOR": ""})
+        self.assertTrue(self._wait_gone(path), "paused task was not evicted in the background")
+        with open(os.path.join(self.state_dir, "janitor-last-run.json")) as fh:
+            last = json.load(fh)
+        self.assertEqual(last["trigger"], "on-use")
+        self.assertIn("evict", last["actions"])
+        restored = self.ensure("idle-task")  # restorable with the unpublished file
+        with open(os.path.join(restored["trees"][0]["path"], "wip.txt")) as fh:
+            self.assertEqual(fh.read(), "wip\n")
+
+    def test_interval_throttles_and_off_disables(self):
+        self.write_config(janitor={"mode": "on-use", "interval_minutes": 60})
+        last_file = os.path.join(self.state_dir, "janitor-last-run.json")
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(last_file, "w") as fh:
+            json.dump({"started_at": time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())}, fh)
+        path = self._pause_and_age("throttled")
+        self.wsp("list", env={"WSP_NO_JANITOR": ""})
+        time.sleep(2)
+        self.assertTrue(os.path.isdir(path))
+        self.write_config(janitor={"mode": "off", "interval_minutes": 0})
+        self.wsp("list", env={"WSP_NO_JANITOR": ""})
+        time.sleep(2)
+        self.assertTrue(os.path.isdir(path))
+        status = self.wsp("janitor", "status")
+        self.assertEqual(status["mode"], "off")
+
+
 if __name__ == "__main__":
     unittest.main()

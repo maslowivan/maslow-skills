@@ -65,6 +65,21 @@ re-prepares dependencies. The base is not moved to a newer main. An occupied
 path or a branch checked out elsewhere is a conflict (`RESTORE_CONFLICT`,
 `BRANCH_BUSY`) — never overwritten or forced.
 
+## Automatic cleanup
+
+`wsp gc` is the cleanup policy: evict paused tasks older than
+`policy.paused_evict_after_hours`, close finished tasks whose work is on the
+remote, delete checkpoints whose content reached the remote, drop unused
+dependency instances, mark stale leases `uncertain`, mark abandoned operations.
+Pinned, `unknown`, leased or process-used trees are kept; finished tasks with
+unpublished work are only reported (`needs_confirmation`).
+
+With `janitor.mode: on-use` (default) the policy runs by itself in a detached
+background process after normal `wsp` commands and Claude Code hooks, at most
+once per `janitor.interval_minutes`; a lock prevents parallel runs. There is no
+service. `scheduled` adds a launchd/systemd user job; `off` leaves it to
+`wsp gc --apply`.
+
 ## Lost source checkout
 
 If the canonical checkout itself is gone, `wsp ensure/restore --reclone-source`

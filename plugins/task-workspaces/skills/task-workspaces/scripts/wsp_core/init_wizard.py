@@ -179,9 +179,11 @@ def detect(cfg, search_dirs=None, repo_map_path=None):
         {"id": "exclusions", "type": "boolean",
          "question": "Exclude worktrees and dependency cache from Time Machine and Spotlight?",
          "options": [True, False], "recommended": environment["platform"] == "Darwin"},
-        {"id": "janitor", "type": "boolean", "question": "Enable background cleanup (janitor)?",
-         "options": [False, True], "recommended": False,
-         "notes": ["Recommended only after the first successful evict -> restore round-trip."]},
+        {"id": "janitor", "type": "choice", "question": "When should the cleanup policy run?",
+         "options": ["on-use", "scheduled", "off"], "recommended": "on-use",
+         "notes": ["on-use: in the background while wsp is used, at most once per hour; no service.",
+                   "scheduled: a launchd/systemd user job (installed by `wsp janitor install`), also when idle.",
+                   "Cleanup only evicts paused/finished tasks after checkpointing; it never deletes unpublished work."]},
         {"id": "integration", "type": "choice", "question": "Optional integration",
          "options": ["none"] + (["repo-map"] if map_path else []),
          "recommended": "repo-map" if map_path else "none",
@@ -203,7 +205,11 @@ def build_config(cfg, answers, detected):
     raw["agents"]["codex"] = detected["environment"]["agents"]["codex"]
     excl = bool(get("exclusions"))
     raw["exclusions"] = {"time_machine": excl and detected["environment"]["platform"] == "Darwin", "spotlight": excl}
-    raw.setdefault("janitor", {})["enabled"] = bool(get("janitor"))
+    janitor_answer = get("janitor")
+    if isinstance(janitor_answer, bool):  # answers written for v0.1
+        janitor_answer = "scheduled" if janitor_answer else "off"
+    raw.setdefault("janitor", {})["mode"] = janitor_answer
+    raw["janitor"].pop("enabled", None)
     raw["integration"] = get("integration")
     if raw["integration"] == "repo-map" and detected["environment"]["repo_map"]:
         raw.setdefault("integration_options", {})["repo_map_path"] = detected["environment"]["repo_map"]

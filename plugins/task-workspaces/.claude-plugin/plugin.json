@@ -50,6 +50,17 @@
       "min": 1,
       "max": 2000
     },
+    "cleanup_mode": {
+      "type": "string",
+      "title": "Automatic cleanup",
+      "description": "on-use: clean up idle tasks in the background while wsp is used (no service); scheduled: a launchd/systemd user job (wsp janitor install); off: only by hand.",
+      "options": [
+        "on-use",
+        "scheduled",
+        "off"
+      ],
+      "default": "on-use"
+    },
     "integration": {
       "type": "string",
       "title": "Integration",

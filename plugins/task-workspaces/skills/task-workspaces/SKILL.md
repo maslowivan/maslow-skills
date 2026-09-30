@@ -65,6 +65,8 @@ If any command returns `CONFIG_MISSING`, run setup before anything else:
 - Finished (PR merged/closed): `wsp close --task ID`. If it returns `UNIQUE_STATE`,
   show the user exactly what would be lost (`would_lose`) and rerun with
   `--discard` **only after the user explicitly confirms**.
+- Idle tasks are cleaned up automatically in the background (default `janitor.mode: on-use`);
+  you do not need to run cleanup yourself. `wsp janitor status` shows the last run.
 - Overview: `wsp list`, `wsp status --task ID` (includes the task's set manifest),
   `wsp inventory` (all worktrees of configured repos, read-only), `wsp gc` (dry run
   of the cleanup policy).
