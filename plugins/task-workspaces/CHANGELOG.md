@@ -5,12 +5,16 @@ plugin bumps `version` in both `.claude-plugin/plugin.json` and
 `.codex-plugin/plugin.json` and adds a section here; CI enforces it and tags the
 release as `task-workspaces-v<version>`.
 
+## 0.4.2 — 2026-09-30
+
+- **Docs:** Codex lists plugin skills in its `/` menu — `/setup-sparse-checkout`
+  (“Set Up Sparse Checkout”) as well as `$setup-sparse-checkout`.
+
 ## 0.4.1 — 2026-09-30
 
 - **Docs:** recommend running `setup-sparse-checkout` once per repository — the
   profiles file is also a compact project index for agents; the skill offers a
   line to reference it from `AGENTS.md`/`CLAUDE.md` but does not edit them.
-  Codex invocation documented as `$setup-sparse-checkout` or the `/skills` menu.
 
 ## 0.4.0 — 2026-09-30
 
