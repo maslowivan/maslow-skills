@@ -7,8 +7,8 @@
     "name": "maslowivan",
     "url": "https://github.com/maslowivan"
   },
-  "homepage": "https://github.com/maslowivan/maslow-worktree-skill",
-  "repository": "https://github.com/maslowivan/maslow-worktree-skill",
+  "homepage": "https://github.com/maslowivan/maslow-skills/tree/main/plugins/task-workspaces",
+  "repository": "https://github.com/maslowivan/maslow-skills",
   "license": "MIT",
   "keywords": [
     "worktree",

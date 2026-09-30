@@ -1,87 +1,54 @@
-# task-workspaces (`wsp`)
+# maslow-skills
 
-Isolated Git worktrees per task, across one or more repositories, for coding
-agents (Claude Code, Codex) and humans.
+Plugins for [Claude Code](https://code.claude.com) and skills for Codex. This
+repository is a Claude Code plugin marketplace: add it once, then install the
+plugins you need.
 
-- one task → one tree per repository, own branch, fresh base, no upstream to main
-- absolute paths from `wsp ensure`; resume always goes through `ensure`
-- dependencies per package dir: copy-on-write clone of a verified install
-  (APFS clonefile / reflink), never symlinks
-- checkpoints only for unique local work (Git objects + bundle), secrets never stored
-- evict/restore, unexpected deletion recovery, squash-merge aware close
-- leases, process checks, disk reserve/quotas/limits, pin, read-only inventory
-- Claude Code plugin: skill, hooks (WorktreeCreate/Remove, SessionStart/End),
-  `bin/wsp`, `userConfig`; Codex skill: same `SKILL.md`, CLI by path
-- first-run wizard `wsp init` (interactive or agent-driven); nothing machine- or
-  company-specific in the code — all paths and repositories come from your config;
-  optional import of repositories from a Markdown table (`--repo-map`)
+## Plugins
 
-Python 3.11+ standard library and Git 2.38+. macOS fully, Linux without
-clonefile (reflink or install), Windows not supported.
-
-## Layout
-
-```
-.claude-plugin/plugin.json        plugin manifest with userConfig
-.claude-plugin/marketplace.json   this repository as a Claude Code marketplace
-hooks/hooks.json                  Claude Code hooks -> bin/wsp hook claude ...
-bin/wsp                           launcher (on PATH when the plugin is enabled)
-skills/task-workspaces/
-  SKILL.md                        agent workflow
-  references/                     lifecycle, dependencies, configuration, claude-code, codex
-  agents/openai.yaml              Codex skill metadata
-  scripts/wsp.py                  CLI entry point
-  scripts/wsp_core/               core modules
-tests/                            end-to-end tests on temporary Git repositories
-```
-
-## Try it without installing
-
-```sh
-python3 skills/task-workspaces/scripts/wsp.py init          # or: init --detect --json
-python3 skills/task-workspaces/scripts/wsp.py doctor
-python3 skills/task-workspaces/scripts/wsp.py inventory     # read-only
-python3 skills/task-workspaces/scripts/wsp.py ensure --task my-task --repo my-repo
-```
-
-Use `WSP_CONFIG=/tmp/x/config.json` to experiment with a throwaway configuration.
+| Plugin | What it does |
+| --- | --- |
+| [task-workspaces](plugins/task-workspaces) | Isolated Git worktrees per task across one or more repositories: absolute paths, dependency reuse via copy-on-write clones, checkpoints before cleanup, restore of removed folders. Works in Claude Code and Codex. |
 
 ## Install
 
 **Claude Code** (2.1.271 or newer):
 
 ```sh
-claude plugin marketplace add maslowivan/maslow-worktree-skill
-claude plugin install task-workspaces@maslow-worktree-skill
+claude plugin marketplace add maslowivan/maslow-skills
+claude plugin install task-workspaces@maslow-skills
 ```
 
-Claude Code asks for the plugin options (worktrees folder, state folder,
-dependency strategy, disk reserve) when the plugin is enabled. To try it for one
-session without installing: `claude --plugin-dir /path/to/maslow-worktree-skill`.
+Update later with `claude plugin marketplace update maslow-skills` and
+`claude plugin update task-workspaces@maslow-skills`. Inside a session the same
+is available through `/plugin`.
 
-**Codex:** link or copy `skills/task-workspaces` into your Codex skills directory,
-for example:
+**Codex:** each plugin keeps its skill in `plugins/<plugin>/skills/<skill>`; link
+or copy that folder into your Codex skills directory. See each plugin's README.
 
-```sh
-ln -s "$PWD/skills/task-workspaces" ~/.codex/skills/task-workspaces
+## Layout
+
+```
+.claude-plugin/marketplace.json   catalog of all plugins in this repository
+plugins/<plugin>/                 one self-contained plugin per folder
+  .claude-plugin/plugin.json      manifest (name, version, options)
+  skills/<skill>/SKILL.md         skill instructions (also usable by Codex)
+  hooks/, bin/, tests/            optional
+scripts/validate.sh               checks every plugin and the catalog
 ```
 
-Then run `wsp init` once (or let the agent run `wsp init --detect --json` and
-ask you the questions). Settings live in `~/.config/wsp/config.json` and are
-shared by the CLI, Codex and Claude Code.
+## Adding a plugin
 
-## Tests
+1. Create `plugins/<name>/` with `.claude-plugin/plugin.json` and at least one
+   `skills/<skill>/SKILL.md`.
+2. Add an entry to `.claude-plugin/marketplace.json` with
+   `"source": "./plugins/<name>"`.
+3. If the plugin has `tests/`, CI runs them automatically.
+4. Run `scripts/validate.sh`.
 
-```sh
-python3 -m unittest discover -s tests -v
-```
+Bump `version` in the plugin's `plugin.json` for every release: users on a
+pinned version only receive updates when it changes.
 
-Tests create their own origin/canonical repositories under a temporary
-directory with an isolated Git config; they never touch real repositories.
+## License
 
-## Not in this version
-
-Sparse-checkout profiles, tracker UI, adoption of existing native worktrees,
-multiple writers per tree. Not verified yet: live runs inside Codex and Claude
-Code sessions, Linux. The background janitor is implemented but never installed
-automatically (`wsp janitor install`).
+[MIT](LICENSE)
