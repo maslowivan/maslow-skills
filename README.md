@@ -19,7 +19,8 @@ codex plugin marketplace add maslowivan/maslow-skills
 codex plugin add task-workspaces@maslow-skills
 ```
 
-Update later with `codex plugin marketplace upgrade maslow-skills`.
+Update later with `codex plugin marketplace upgrade maslow-skills`, then
+`codex plugin add task-workspaces@maslow-skills` again (see [Versions and updates](#versions-and-updates)).
 
 ### Claude Code (2.1.271 or newer)
 
@@ -39,7 +40,11 @@ tagged `<plugin>-v<version>` with [release notes](https://github.com/maslowivan/
 To get the latest versions:
 
 ```sh
+# Codex: refresh the catalog, then add the plugin again (installs the new version, removes the old one)
 codex plugin marketplace upgrade maslow-skills
+codex plugin add task-workspaces@maslow-skills
+
+# Claude Code
 claude plugin marketplace update maslow-skills
 claude plugin update task-workspaces@maslow-skills
 ```
