@@ -341,20 +341,34 @@ def cmd_sparse(args):
         from . import gitutil
         root = gitutil.toplevel(repo_path)
         profiles = None
+        base = None
         if args.repo:  # the committed version on the default branch is what new tasks use
             default = cfg.repo(args.repo).get("default_branch") or gitutil.default_branch(root)
-            profiles, _ = sparse.load_at(root, f"refs/remotes/origin/{default}")
+            ref = f"refs/remotes/origin/{default}"
+            base = {"ref": f"origin/{default}", "fetched": False}
+            if not args.no_fetch:  # remote-tracking ref only: the checkout itself is never touched
+                fetch_cfg = cfg.data["fetch"]
+                try:
+                    gitutil.fetch_with_retry(root, "origin", f"+refs/heads/{default}:{ref}", fetch_cfg["retries"],
+                                             fetch_cfg["backoff_seconds"], fetch_cfg["timeout_seconds"])
+                    base["fetched"] = True
+                except WspError as exc:
+                    base["warning"] = f"fetch failed, using the last known origin/{default}: {exc.message}"
+            base["sha"] = gitutil.rev_parse(root, ref)
+            profiles, _ = sparse.load_at(root, ref)
         profiles = profiles if profiles is not None else sparse.load(root)
         if profiles is None:
             raise WspError("SPARSE_PROFILE_UNKNOWN", f"{sparse.FILE_PATH} not found in {root}; "
                            "run `wsp sparse scan --write` there")
+        extra = {"base": base} if base else {}
         if args.action == "list":
-            _print(args, {"file": sparse.profiles_path(root), "profiles": profiles}, _render_sparse)
+            _print(args, {"file": sparse.profiles_path(root), "profiles": profiles, **extra}, _render_sparse)
         elif args.action == "match":
             names = sparse.match(profiles, " ".join(args.query or []))
-            _print(args, {"query": " ".join(args.query or []), "matches": [{"name": n, **profiles[n]} for n in names]})
+            _print(args, {"query": " ".join(args.query or []), "matches": [{"name": n, **profiles[n]} for n in names],
+                          **extra})
         else:
-            _print(args, {"folder": args.folder_arg, "profiles": sparse.consumers(profiles, args.folder_arg)})
+            _print(args, {"folder": args.folder_arg, "profiles": sparse.consumers(profiles, args.folder_arg), **extra})
         return 0
     if args.action == "add":
         ctx = _ctx(args)
@@ -508,6 +522,8 @@ def build_parser():
     sp.add_argument("--profile", action="append", help="add: profile to add to the tree")
     sp.add_argument("--folder", action="append", help="add: folder to add to the tree")
     sp.add_argument("--of", dest="folder_arg", help="consumers: folder whose consumers to list")
+    sp.add_argument("--no-fetch", action="store_true",
+                    help="list/match/consumers with --repo: do not fetch the default branch first")
     sp = add("hook", cmd_hook, "agent hook entry point (reads event JSON on stdin)")
     sp.add_argument("app", choices=["claude"])
     sp.add_argument("name", choices=["worktree-create", "worktree-remove", "session-start", "session-end"])

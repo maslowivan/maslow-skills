@@ -5,6 +5,18 @@ plugin bumps `version` in both `.claude-plugin/plugin.json` and
 `.codex-plugin/plugin.json` and adds a section here; CI enforces it and tags the
 release as `task-workspaces-v<version>`.
 
+## 0.5.3 — 2026-10-01
+
+- **Changed:** `wsp sparse list|match|consumers --repo` fetch the default branch
+  first (remote-tracking ref only; `--no-fetch` skips it) and report the `base`
+  they read, so profiles merged after the canonical checkout was last updated are
+  found.
+- **Added:** `wsp ensure` without `--profile` in a repository that has
+  `.wsp/SC-PROFILES.md` at the base warns that the tree is a full checkout and
+  returns `sparse_available` with suggested profiles.
+- **Docs:** the skill always runs `wsp sparse match --repo` before `ensure`
+  instead of looking for the file in the canonical checkout.
+
 ## 0.5.2 — 2026-10-01
 
 - **Fixed:** the disk budget of `wsp run --max-growth-gib` also counts the growth

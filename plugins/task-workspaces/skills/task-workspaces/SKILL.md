@@ -34,13 +34,18 @@ If any command returns `CONFIG_MISSING`, run setup before anything else:
    (e.g. from the tracker row). One chat can run several tasks.
 3. **Repositories.** Decide every repository the task needs (`wsp config show`
    lists configured ones). Read their instructions (AGENTS.md / CLAUDE.md).
-4. **Sparse profile (large repositories).** If the repository has
-   `.wsp/SC-PROFILES.md`, pick the profile(s) for the part of the code the task touches:
-   `wsp sparse match "<words from the task: service, domain, package>" --repo NAME --json`,
-   or read the file (each profile has a short `about`, tags with names and domains). Pass them to `ensure` with
-   `--profile NAME` (several repos: `--profile REPO:PROFILE`). No file, or no
-   profile fits → full checkout; for big monorepos suggest
-   `/task-workspaces:setup-sparse-checkout`.
+4. **Sparse profile (large repositories).** Always run
+   `wsp sparse match "<words from the task: service, domain, package>" --repo NAME --json`
+   before `ensure`. It fetches `origin/<default>` and reads `.wsp/SC-PROFILES.md`
+   committed there, so do not judge by the canonical checkout's files: it may
+   lag behind. Pick the profile(s) for the part of the code the task touches
+   (each has a short `about`, tags with names and domains) and pass them to
+   `ensure` with `--profile NAME` (several repos: `--profile REPO:PROFILE`).
+   `SPARSE_PROFILE_UNKNOWN` (no file), or no profile fits → full checkout; for
+   big monorepos suggest `/task-workspaces:setup-sparse-checkout`. If `ensure`
+   returns `sparse_available` with a warning, the full checkout was not intended:
+   tell the user, and for a fresh tree with no work yet `wsp close` it and ensure
+   again with `--profile`.
 5. **Ensure.** `wsp ensure --task ID --repo NAME [--repo NAME2] [--profile P] [--deps NAME:PACKAGE_DIR] --json`
    - reuses, creates (from a fresh `origin/<default>`), or restores the trees;
    - to continue an existing remote branch: `--branch B --from-remote-branch`;

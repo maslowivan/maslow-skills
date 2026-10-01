@@ -147,6 +147,25 @@ class ScanTests(SparseSandbox):
         consumers = self.wsp("sparse", "consumers", "--repo", "mono", "--of", "shared/ui")
         self.assertEqual(consumers["profiles"], ["web"])
 
+    def test_queries_by_repo_fetch_the_default_branch_first(self):
+        # profiles land on origin from another clone; the canonical checkout has not fetched them
+        other = os.path.join(self.tmp, "other-mono")
+        self.git(self.tmp, "clone", "-q", self.origins["mono"], other)
+        self.wsp("sparse", "scan", other, "--write")
+        self.git(other, "add", ".wsp")
+        self.git(other, "commit", "-q", "-m", "profiles")
+        self.git(other, "push", "-q", "origin", "main")
+        canon_head = self.git(self.canon["mono"], "rev-parse", "HEAD").stdout
+        err = self.wsp("sparse", "match", "api", "--repo", "mono", "--no-fetch", ok=False)
+        self.assertEqual(err["error"]["code"], "SPARSE_PROFILE_UNKNOWN")
+        match = self.wsp("sparse", "match", "api", "--repo", "mono")
+        self.assertEqual(match["matches"][0]["name"], "api")
+        self.assertTrue(match["base"]["fetched"])
+        self.assertEqual(match["base"]["sha"], self.git(other, "rev-parse", "HEAD").stdout.strip())
+        # only the remote-tracking ref moved: the canonical checkout is untouched
+        self.assertEqual(self.git(self.canon["mono"], "rev-parse", "HEAD").stdout, canon_head)
+        self.assertFalse(os.path.exists(self.profiles_file()))
+
 
 class TagTests(unittest.TestCase):
     def test_dedupe_prefers_readable_and_drops_profile_name(self):
@@ -204,6 +223,16 @@ class SparseTreeTests(SparseSandbox):
         added = self.wsp("sparse", "add", "--task", "sp", "--repo", "mono", "--profile", "api")
         self.assertIn("services/api", added["added"])
         self.assertIn("services/api/src/main.ts", self.files(path))
+
+    def test_full_checkout_warns_when_profiles_exist(self):
+        res = self.ensure("web-fix", "mono")
+        tree = res["trees"][0]
+        self.assertIsNone(tree.get("sparse"))
+        self.assertEqual(tree["sparse_available"]["suggested"][0], "web")
+        self.assertGreaterEqual(tree["sparse_available"]["profiles"], 3)
+        self.assertTrue(any("--profile mono:<name>" in w for w in res["warnings"]))
+        sparse_tree = self.ensure("web-sparse", "mono", extra=("--profile", "web"))["trees"][0]
+        self.assertNotIn("sparse_available", sparse_tree)
 
     def test_unknown_profile_suggests_names(self):
         err = self.wsp("ensure", "--task", "bad", "--repo", "mono", "--holder", "cli:test",

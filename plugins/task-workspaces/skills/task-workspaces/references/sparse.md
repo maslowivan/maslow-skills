@@ -62,7 +62,7 @@ user through it and has the agent write the briefs.
 
 | Command | Purpose |
 | --- | --- |
-| `wsp sparse match "<words>" --repo R --json` | profiles ranked by whole-word matches in name, tags and paths |
+| `wsp sparse match "<words>" --repo R --json` | profiles ranked by whole-word matches in name, tags and paths; fetches `origin/<default>` first (`--no-fetch` to skip) and reads the committed file, never the canonical checkout's copy |
 | `wsp ensure --task T --repo R --profile NAME [--profile NAME2] [--folder F]` | create a sparse tree (with several repos: `--profile R:NAME`) |
 | `wsp sparse add --task T --repo R --profile NAME / --folder F` | widen an existing sparse tree |
 | `wsp sparse consumers --repo R --of FOLDER --json` | profiles that include a folder (who else a shared change affects) |
@@ -76,3 +76,10 @@ the same cone. An existing full tree is never narrowed.
 Git enables `extensions.worktreeConfig` in the repository config the first time
 a sparse worktree is created (the sparse settings are per worktree; the main
 checkout stays a full checkout). `wsp` reports this once as a warning.
+
+`wsp sparse list|match|consumers --repo R` report `base` (`ref`, `sha`, `fetched`, and a
+`warning` when the fetch failed and the last known ref was used). Only the
+remote-tracking ref is updated; the canonical checkout's branch and files are never
+touched. `wsp ensure` without `--profile` in a repository whose base has profiles
+returns `sparse_available` (`profiles` count, `suggested` names from the task id and
+branch) and a warning: the tree is a full checkout.

@@ -8,6 +8,7 @@ import socket
 import subprocess
 
 import json
+import re
 
 from . import checkpoint, deps, disk, gitutil, locks, manifests, procs, safety, sparse, util
 from .errors import WspError
@@ -306,6 +307,18 @@ def _sparse_folders_for(src, rev, sparse_req):
     return names, sparse._dedupe(folders), source
 
 
+def _sparse_hint(src, rev, task_id, branch):
+    """The repository has profiles but none was requested: count them and suggest matches by task/branch words."""
+    try:
+        profiles, _ = sparse.load_at(src, rev)
+    except WspError:
+        return None
+    if not profiles:
+        return None
+    words = re.sub(r"[^a-z0-9]+", " ", f"{task_id} {branch.split('/', 1)[-1]}".lower())
+    return {"profiles": len(profiles), "suggested": sparse.match(profiles, words)[:3]}
+
+
 def _checkout_sparse(src, path, folders, warnings):
     """Populate a --no-checkout worktree with only `folders` (cone mode)."""
     had_worktree_config = sparse.worktree_config_enabled(src)
@@ -371,6 +384,11 @@ def _create(ctx, task_id, repo, existing, holder, op, base_ref=None, branch=None
     if not start:
         raise WspError("GIT_FAILED", "base revision not found", base=base_ref or default_ref)
     profile_names, sparse_folders, sparse_source = _sparse_folders_for(src, start, sparse_req)
+    sparse_hint = None if sparse_folders else _sparse_hint(src, start, task_id, branch)
+    if sparse_hint:
+        warnings.append(f"{repo}: full checkout, but {sparse.FILE_PATH} has {sparse_hint['profiles']} profiles; "
+                        f"pass --profile {repo}:<name> (`wsp sparse match \"<words>\" --repo {repo}`)"
+                        + (f", e.g. {', '.join(sparse_hint['suggested'])}" if sparse_hint["suggested"] else ""))
 
     estimate = _estimate(ctx, repo)
     disk.admit(ctx.cfg, ctx.reg, estimate, new_trees=1, new_task=new_task)
@@ -413,7 +431,8 @@ def _create(ctx, task_id, repo, existing, holder, op, base_ref=None, branch=None
     return {"repo": repo, "tree_id": tree["id"], "path": path, "branch": branch, "head": start, "base_sha": start,
             "base_fresh": base_fresh, "state": "ready", "action": "created", "lease": "owner",
             "secrets_materialized": [s["path"] for s in secrets], "size": util.human_bytes(size),
-            **_sparse_info(tree), **({"sparse_source": sparse_source} if sparse_folders else {}), "warnings": warnings}
+            **_sparse_info(tree), **({"sparse_source": sparse_source} if sparse_folders else {}),
+            **({"sparse_available": sparse_hint} if sparse_hint else {}), "warnings": warnings}
 
 
 def _rollback_created(ctx, tree_ids):
