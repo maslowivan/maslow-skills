@@ -5,6 +5,19 @@ plugin bumps `version` in both `.claude-plugin/plugin.json` and
 `.codex-plugin/plugin.json` and adds a section here; CI enforces it and tags the
 release as `task-workspaces-v<version>`.
 
+## 0.5.4 — 2026-10-09
+
+- **Fixed:** flaky `test_queries_by_repo_fetch_the_default_branch_first` on macOS
+  CI (`unable to read sha1 file`, `fatal: unable to checkout working tree`). Since
+  Git 2.54 the default `geometric` maintenance strategy repacks after a push as
+  soon as two loose objects sit in `objects/17` (it estimates the count from that
+  one shard), so a detached `git repack` of the bare test origin packed and pruned
+  loose objects while a local `git clone` of it was still copying them. The test
+  sandbox now disables automatic maintenance (`maintenance.auto=false`,
+  `gc.auto=0`), and a regression test pushes two objects into `objects/17` and
+  checks that no maintenance starts and they stay loose. `wsp` itself is not
+  affected: it only clones from the configured remote origin.
+
 ## 0.5.3 — 2026-10-01
 
 - **Changed:** `wsp sparse list|match|consumers --repo` fetch the default branch

@@ -31,8 +31,12 @@ class Sandbox(unittest.TestCase):
         self.addCleanup(self._cleanup)
         gitconfig = os.path.join(self.tmp, "gitconfig")
         with open(gitconfig, "w") as fh:
+            # no auto maintenance: since Git 2.54 a push can start a detached geometric repack of the
+            # bare origin (two loose objects in objects/17 are enough), which deletes loose objects
+            # while a local `git clone` of that origin is still copying them
             fh.write("[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n"
-                     "[commit]\n\tgpgsign = false\n[advice]\n\tdetachedHead = false\n")
+                     "[commit]\n\tgpgsign = false\n[advice]\n\tdetachedHead = false\n"
+                     "[maintenance]\n\tauto = false\n[gc]\n\tauto = 0\n")
         self.env = {k: v for k, v in os.environ.items()
                     if k not in ("CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID", "GIT_DIR", "GIT_WORK_TREE",
                                  "GIT_INDEX_FILE") and not k.startswith("CLAUDE_PLUGIN_OPTION_")}
