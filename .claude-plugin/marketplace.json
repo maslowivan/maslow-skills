@@ -17,6 +17,18 @@
         "workspace",
         "monorepo"
       ]
+    },
+    {
+      "name": "heat-check",
+      "source": "./plugins/heat-check",
+      "description": "Find out why your computer is hot, loud or slow right now: CPU per process and per app, memory pressure and swap, thermal throttling and (on macOS) display scaling and screen capture, explained with safe fixes. Read-only.",
+      "category": "productivity",
+      "tags": [
+        "cpu",
+        "overheating",
+        "performance",
+        "macos"
+      ]
     }
   ]
 }

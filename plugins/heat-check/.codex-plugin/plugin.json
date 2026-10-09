@@ -1,0 +1,36 @@
+{
+  "name": "heat-check",
+  "version": "0.1.0",
+  "description": "Find out why your computer is hot, loud or slow right now: CPU per process and per app over a short sample, load, memory pressure and swap, thermal throttling, power and (on macOS) display scaling and screen capture, explained with safe fixes. Read-only, no root.",
+  "author": {
+    "name": "maslowivan",
+    "url": "https://github.com/maslowivan"
+  },
+  "homepage": "https://github.com/maslowivan/maslow-skills/tree/main/plugins/heat-check",
+  "repository": "https://github.com/maslowivan/maslow-skills",
+  "license": "MIT",
+  "keywords": [
+    "cpu",
+    "overheating",
+    "performance",
+    "macos",
+    "diagnostics"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Heat Check",
+    "shortDescription": "Why is my computer hot or slow",
+    "longDescription": "A read-only diagnosis of what heats or loads the machine right now. Samples CPU per process and sums it per app (Electron helpers included), reads load, memory pressure, swap and compression, thermal throttling and power source, and on macOS spots scaled display modes and screen capture that keep WindowServer busy. Explains kernel_task, WindowServer and background jobs correctly and suggests safe fixes; never kills anything without asking. macOS first, Linux supported; no root, Python standard library only.",
+    "developerName": "maslowivan",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read"
+    ],
+    "websiteURL": "https://github.com/maslowivan/maslow-skills/tree/main/plugins/heat-check",
+    "defaultPrompt": [
+      "Why is my Mac so hot right now?",
+      "Check CPU load and what is eating it",
+      "Why are the fans so loud?"
+    ]
+  }
+}

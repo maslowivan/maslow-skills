@@ -18,6 +18,21 @@
         ]
       },
       "category": "Developer Tools"
+    },
+    {
+      "name": "heat-check",
+      "source": {
+        "source": "local",
+        "path": "./plugins/heat-check"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL",
+        "products": [
+          "CODEX"
+        ]
+      },
+      "category": "Developer Tools"
     }
   ]
 }

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Heat Check"
+  short_description: "Why is my computer hot: CPU per app, memory, throttling, displays"
+  default_prompt: "Use $heat-check to find out why this computer is hot or slow right now and what to do about it."
