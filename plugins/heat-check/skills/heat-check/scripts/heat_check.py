@@ -21,7 +21,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 # Process names (basename, case-sensitive) that explain themselves. The hint is
 # shown next to the process in findings so the user knows what it is and what helps.
@@ -49,6 +49,11 @@ KNOWN = {
     "syspolicyd": ("Gatekeeper checks", "Often busy after installing or running many new binaries."),
     "replayd": ("macOS screen capture service", "Something is recording or sharing the screen; "
                 "every captured frame also loads WindowServer."),
+    "fseventsd": ("file change notification service", "Busy when many files change at once: git checkouts and "
+                  "worktrees, dependency installs, builds and file watchers, sync clients, backups. Stop "
+                  "the bulk job or watcher; exclude churning folders from Spotlight."),
+    "spindump": ("writes a report about an app that stopped responding", "Temporary. The hung app is named in "
+                 "recent hang reports (Console → Diagnostic Reports); restart it if it keeps hanging."),
     "coreaudiod": ("Core Audio", "Busy with active audio streams, calls or virtual audio devices."),
     "Google Chrome Helper (Renderer)": ("a Chrome tab", "Find the tab in Chrome's Task Manager (Window → Task Manager)."),
     "node": ("Node.js process", "Dev servers, watchers and builds; stop the ones you do not use."),
@@ -58,6 +63,9 @@ KNOWN = {
 }
 
 SPOTLIGHT = {"mds", "mds_stores", "mdworker", "mdworker_shared", "corespotlightd"}
+OWN_CODE = {"WindowServer", "kernel_task", "fseventsd", "spindump"}  # have their own findings
+REPORT_DIRS = ("/Library/Logs/DiagnosticReports", "~/Library/Logs/DiagnosticReports")
+REPORT_HOURS = 3
 CAPTURE_RE = re.compile(r"replayd|screencapture|ScreenCapture|ComputerUse|CptHost|obs$", re.I)
 
 
@@ -195,6 +203,49 @@ def parse_displays(data):
     return out
 
 
+def parse_reports(entries, now, hours=REPORT_HOURS):
+    """[(filename, mtime)] of DiagnosticReports -> recent hang / CPU / memory-kill reports, newest first.
+
+    Only file names are read (process, kind, age); the reports themselves are not opened."""
+    out = []
+    for name, mtime in entries:
+        age = (now - mtime) / 60.0
+        if age < 0 or age > hours * 60:
+            continue
+        if name.startswith("JetsamEvent"):
+            kind, proc = "memory_kill", None
+        else:
+            m = re.match(r"^(.+?)[_-]\d{4}-\d{2}-\d{2}-\d{6}(?:_[^.]*)?\.(.+)$", name)
+            if not m:
+                continue
+            proc, ext = m.group(1), m.group(2)
+            if ext in ("hang", "spin") or ext.startswith("hang."):
+                kind = "hang"
+            elif ext.startswith("cpu_resource"):
+                kind = "cpu_resource"
+            else:
+                continue
+        out.append({"kind": kind, "process": proc, "minutes_ago": int(age)})
+    out.sort(key=lambda r: r["minutes_ago"])
+    return out
+
+
+def list_reports():
+    entries = []
+    for d in REPORT_DIRS:
+        d = os.path.expanduser(d)
+        try:
+            names = os.listdir(d)
+        except OSError:
+            continue
+        for n in names:
+            try:
+                entries.append((n, os.stat(os.path.join(d, n)).st_mtime))
+            except OSError:
+                pass
+    return parse_reports(entries, time.time())
+
+
 def _wh(text):
     m = re.search(r"(\d{3,5})\s*x\s*(\d{3,5})", text or "")
     return (int(m.group(1)), int(m.group(2))) if m else None
@@ -237,6 +288,7 @@ def collect_macos(interval, top_n, skip):
         "power": parse_batt(run(["pmset", "-g", "batt"])),
         "low_power_mode": _low_power(run(["pmset", "-g"])),
         "displays": None,
+        "reports": list_reports(),
         "procs": procs,
     }
     if "displays" not in skip:
@@ -497,7 +549,7 @@ def analyze(snap):
 
     hot_apps = set()
     for p in procs:
-        if p["name"] in ("WindowServer", "kernel_task") or p["cpu"] < 50:
+        if p["name"] in OWN_CODE or p["cpu"] < 50:
             continue
         hot_apps.add(p["app"])
         known = KNOWN.get(p["name"])
@@ -509,6 +561,42 @@ def analyze(snap):
                                                   "(ask before killing anything)."))
 
     spot = sum(p["cpu"] for p in procs if p["name"] in SPOTLIGHT or p["name"].startswith("mdworker"))
+    fse = cpu_of("fseventsd")
+    if fse >= 20:
+        ev = f"fseventsd {fse:.0f}% CPU" + (f", Spotlight {spot:.0f}% CPU indexing the same changes" if spot >= 10 else "")
+        findings.append(_f("high" if fse >= 60 else "medium", "FILE_CHURN",
+                           "Many files are changing at once (fseventsd is busy)", ev,
+                           KNOWN["fseventsd"][1] + " To see who writes, run yourself: "
+                           "sudo fs_usage -w -f filesys | head -200"))
+
+    reports = snap.get("reports") or []
+    hangs = [r for r in reports if r["kind"] == "hang"]
+    hung = ", ".join(f"{r['process']} {r['minutes_ago']} min ago" for r in hangs[:5])
+    sd = cpu_of("spindump")
+    if sd >= 5:
+        findings.append(_f("medium" if sd >= 20 else "info", "APP_HANG",
+                           "An app recently stopped responding (spindump is writing a report)",
+                           f"spindump {sd:.0f}% CPU" + (f"; recent hang reports: {hung}" if hung else ""),
+                           KNOWN["spindump"][1]))
+    elif hangs:
+        findings.append(_f("info", "APP_HANG", "Apps stopped responding recently", f"hang reports: {hung}",
+                           KNOWN["spindump"][1]))
+    flagged = {}
+    for r in reports:
+        if r["kind"] == "cpu_resource":
+            flagged.setdefault(r["process"], r["minutes_ago"])
+    if flagged:
+        findings.append(_f("info", "CPU_RESOURCE_REPORTS",
+                           f"macOS flagged heavy CPU use in the last {REPORT_HOURS} h",
+                           ", ".join(f"{k} {v} min ago" for k, v in list(flagged.items())[:6]),
+                           "These processes exceeded macOS CPU limits recently; if they are not busy now, the heat "
+                           "may come in bursts from them."))
+    kills = [r for r in reports if r["kind"] == "memory_kill"]
+    if kills:
+        findings.append(_f("medium", "MEMORY_KILLS", "macOS killed processes for lack of memory",
+                           f"{len(kills)} JetsamEvent report(s), latest {kills[0]['minutes_ago']} min ago",
+                           "Memory ran out recently; quit memory-heavy apps."))
+
     if spot >= 20:
         findings.append(_f("medium", "SPOTLIGHT_INDEXING", "Spotlight is indexing", f"Spotlight processes {spot:.0f}% CPU",
                            KNOWN["mds"][1]))

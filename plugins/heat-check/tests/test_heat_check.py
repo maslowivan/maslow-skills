@@ -146,6 +146,38 @@ class Analysis(unittest.TestCase):
         self.assertEqual([x["severity"] for x in f], sorted((x["severity"] for x in f),
                                                              key={"high": 0, "medium": 1, "info": 2}.get))
 
+    def test_file_churn_and_hang(self):
+        procs = [{"pid": 349, "name": "fseventsd", "app": "fseventsd", "cpu": 47.0, "mem": 1 << 20},
+                 {"pid": 570, "name": "mds_stores", "app": "mds_stores", "cpu": 25.0, "mem": 1 << 20},
+                 {"pid": 44727, "name": "spindump", "app": "spindump", "cpu": 20.0, "mem": 1 << 20}]
+        reports = hc.parse_reports([("Slack_2026-10-09-221212_host.hang", 1000 - 600)], 1000)
+        f = hc.analyze({"os": "macos", "ncpu": 10, "load": [3, 3, 3], "cpu": {"user": 30, "sys": 30, "idle": 40},
+                        "memory": {}, "thermal": {}, "reports": reports, "procs": procs})
+        by = {x["code"]: x for x in f}
+        self.assertEqual(by["FILE_CHURN"]["severity"], "medium")
+        self.assertIn("Spotlight 25%", by["FILE_CHURN"]["evidence"])
+        self.assertEqual(by["APP_HANG"]["severity"], "medium")
+        self.assertIn("Slack 10 min ago", by["APP_HANG"]["evidence"])
+        self.assertNotIn("HOT_PROCESS", by)
+
+    def test_reports_from_names(self):
+        now = 100000.0
+        r = hc.parse_reports([
+            ("spotlightknowledged_2026-10-09-223953_host.cpu_resource.diag", now - 30 * 60),
+            ("JetsamEvent-2026-10-08-032928.ips", now - 60 * 60),
+            ("Telegram_2026-10-09-211648_host.diag", now - 60),  # generic report: ignored
+            ("Old_2026-10-01-000000_host.hang", now - 24 * 3600),  # too old
+            ("Safari_2026-10-09-223953_host.spin", now - 5 * 60),
+        ], now)
+        self.assertEqual(r, [{"kind": "hang", "process": "Safari", "minutes_ago": 5},
+                             {"kind": "cpu_resource", "process": "spotlightknowledged", "minutes_ago": 30},
+                             {"kind": "memory_kill", "process": None, "minutes_ago": 60}])
+        codes_ = codes(hc.analyze({"os": "macos", "ncpu": 8, "load": [1, 1, 1], "cpu": {"idle": 90, "user": 5, "sys": 5},
+                                   "memory": {}, "thermal": {}, "reports": r, "procs": []}))
+        for code in ("APP_HANG", "CPU_RESOURCE_REPORTS", "MEMORY_KILLS"):
+            self.assertIn(code, codes_)
+        self.assertNotIn("NOTHING_HOT", codes_)
+
     def test_linux_temperature(self):
         f = hc.analyze({"os": "linux", "ncpu": 4, "load": [1, 1, 1], "cpu": {"user": 5, "sys": 5, "idle": 90},
                         "memory": {}, "thermal": {}, "temperatures": [{"sensor": "x86_pkg_temp", "celsius": 93.0}],

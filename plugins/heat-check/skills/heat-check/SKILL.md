@@ -51,6 +51,12 @@ Interpretation rules that are easy to get wrong:
 - **Full swap / compressor** with pressure "normal" means memory was short and
   is still paged out; it costs CPU when touched again. Quitting or restarting
   memory-heavy apps helps more than closing tiny ones.
+- **fseventsd** high = many files changing at once (git checkouts/worktrees,
+  `node_modules` installs, builds and watchers, sync clients, backups); Spotlight
+  then indexes the same churn. Point at the bulk job, not at fseventsd.
+- **spindump** = an app stopped responding and macOS is writing a hang report;
+  name the app from `APP_HANG` evidence. `CPU_RESOURCE_REPORTS` lists processes
+  macOS flagged for CPU bursts in the last 3 h - useful when it is not hot right now.
 - **Spotlight, Photos analysis, Time Machine, iCloud, software update** are
   temporary background jobs; say so instead of recommending to kill them.
 - `%CPU` is per core: 100% = one full core, a 10-core Mac has 1000%.

@@ -19,6 +19,7 @@ changes a setting; the agent asks before doing anything.
 | Temperatures | needs root, see below | `/sys/class/thermal` |
 | Power source, battery, Low Power Mode | `pmset` | `/sys/class/power_supply` |
 | Display scaling (e.g. a 4K panel rendering 5120x2880) | `system_profiler` | – |
+| File churn (`fseventsd`), app hangs (`spindump`), recent hang/CPU/memory-kill reports | `DiagnosticReports` file names | – |
 
 The findings explain the usual traps: `kernel_task` is macOS cooling down (a
 symptom, not a cause), `WindowServer` load comes from scaled resolutions, large

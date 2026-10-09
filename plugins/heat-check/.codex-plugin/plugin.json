@@ -1,6 +1,6 @@
 {
   "name": "heat-check",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Find out why your computer is hot, loud or slow right now: CPU per process and per app over a short sample, load, memory pressure and swap, thermal throttling, power and (on macOS) display scaling and screen capture, explained with safe fixes. Read-only, no root.",
   "author": {
     "name": "maslowivan",
