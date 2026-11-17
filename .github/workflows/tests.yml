@@ -34,7 +34,8 @@ jobs:
         include:
           # the oldest supported Python, and the macOS system one (/usr/bin/python3 from the
           # Command Line Tools) that colleagues without Homebrew Python have
-          - { os: ubuntu-latest, python: "3.9" }
+          # Python 3.9 builds are available for 22.04, not the latest Ubuntu image.
+          - { os: ubuntu-22.04, python: "3.9" }
           - { os: ubuntu-latest, python: "3.13" }
           - { os: macos-latest, python: "system" }
           - { os: macos-latest, python: "3.13" }
