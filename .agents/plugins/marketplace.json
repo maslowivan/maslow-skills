@@ -33,6 +33,21 @@
         ]
       },
       "category": "Developer Tools"
+    },
+    {
+      "name": "writing-clearly-and-concisely",
+      "source": {
+        "source": "local",
+        "path": "./plugins/writing-clearly-and-concisely"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL",
+        "products": [
+          "CODEX"
+        ]
+      },
+      "category": "Productivity"
     }
   ]
 }

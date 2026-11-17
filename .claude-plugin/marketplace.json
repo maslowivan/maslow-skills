@@ -29,6 +29,18 @@
         "performance",
         "macos"
       ]
+    },
+    {
+      "name": "writing-clearly-and-concisely",
+      "source": "./plugins/writing-clearly-and-concisely",
+      "description": "Write and edit simple, natural English and Russian prose with a clear, logical flow. Preserves English references and adds separate Russian examples.",
+      "category": "productivity",
+      "tags": [
+        "writing",
+        "editing",
+        "english",
+        "russian"
+      ]
     }
   ]
 }
