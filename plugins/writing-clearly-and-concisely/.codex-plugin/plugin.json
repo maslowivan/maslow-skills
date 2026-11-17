@@ -1,0 +1,36 @@
+{
+  "name": "writing-clearly-and-concisely",
+  "version": "0.1.0",
+  "description": "Write and edit clear, concise English and Russian prose. Preserves Strunk-based English references and adds separate Russian examples for documentation, messages, reports, and UI copy.",
+  "author": {
+    "name": "maslowivan",
+    "url": "https://github.com/maslowivan"
+  },
+  "homepage": "https://github.com/maslowivan/maslow-skills/tree/main/plugins/writing-clearly-and-concisely",
+  "repository": "https://github.com/maslowivan/maslow-skills",
+  "license": "MIT",
+  "keywords": [
+    "writing",
+    "editing",
+    "clarity",
+    "english",
+    "russian"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Writing Clearly and Concisely",
+    "shortDescription": "Clear prose in English and Russian",
+    "longDescription": "Write and edit clear, concise English and Russian prose. Preserves Strunk-based English references and adds separate Russian examples for documentation, messages, reports, and UI copy.",
+    "developerName": "maslowivan",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/maslowivan/maslow-skills/tree/main/plugins/writing-clearly-and-concisely",
+    "defaultPrompt": [
+      "Make this text clearer and more concise",
+      "Отредактируй текст: ясно и кратко, без канцелярита"
+    ]
+  }
+}

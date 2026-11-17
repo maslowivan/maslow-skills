@@ -10,6 +10,7 @@ need. Every plugin ships the same skill for both agents.
 | --- | :-: | :-: | --- |
 | [task-workspaces](plugins/task-workspaces) | ✓ | ✓ | A faster, SSD-friendly alternative to built-in worktrees, plus a per-repository project index for agents (`.wsp/SC-PROFILES.md`): isolated trees per task in several repositories from one project and chat, sparse checkout per subproject (fewer files, fewer tokens), reused dependency installs via copy-on-write clones, disk limits and automatic cleanup, checkpoints and restore. macOS native, Linux supported. [Why →](plugins/task-workspaces#why-use-it-instead-of-built-in-worktrees) |
 | [heat-check](plugins/heat-check) | ✓ | ✓ | Why is my computer hot, loud or slow right now: CPU per process and per app over a short sample, load, memory pressure and swap, thermal throttling, and on macOS the display scaling and screen capture that keep WindowServer busy, explained with safe fixes. Read-only, no root. macOS first, Linux supported. |
+| [writing-clearly-and-concisely](plugins/writing-clearly-and-concisely) | ✓ | ✓ | Clear, concise English and Russian prose: original English examples and references, separate Russian examples, preserved source attribution. |
 
 ## Install
 
@@ -19,6 +20,7 @@ need. Every plugin ships the same skill for both agents.
 codex plugin marketplace add maslowivan/maslow-skills
 codex plugin add task-workspaces@maslow-skills
 codex plugin add heat-check@maslow-skills
+codex plugin add writing-clearly-and-concisely@maslow-skills
 ```
 
 Update later with `codex plugin marketplace upgrade maslow-skills`, then
@@ -30,6 +32,7 @@ Update later with `codex plugin marketplace upgrade maslow-skills`, then
 claude plugin marketplace add maslowivan/maslow-skills
 claude plugin install task-workspaces@maslow-skills
 claude plugin install heat-check@maslow-skills
+claude plugin install writing-clearly-and-concisely@maslow-skills
 ```
 
 Update later with `claude plugin marketplace update maslow-skills` and
