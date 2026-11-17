@@ -28,7 +28,8 @@ proof that a person or text used AI and not as a universal banned-word list.
 
 - Preserved the upstream README, all five `elements-of-style/` files, and
   `signs-of-ai-writing.md` byte for byte, including English examples and links.
-- Updated `SKILL.md` with language routing, meaning-preservation guidance,
+- Updated `SKILL.md` with simple, natural language and logical flow guidance,
+  language routing, meaning-preservation guidance,
   correct relative reference links, attribution, and a local copyediting workflow.
 - Added `russian-examples.md`: original Russian examples and language-specific
   guidance by maslowivan, distributed under MIT. These are adaptations of general

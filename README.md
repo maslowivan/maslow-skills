@@ -10,7 +10,7 @@ need. Every plugin ships the same skill for both agents.
 | --- | :-: | :-: | --- |
 | [task-workspaces](plugins/task-workspaces) | ✓ | ✓ | A faster, SSD-friendly alternative to built-in worktrees, plus a per-repository project index for agents (`.wsp/SC-PROFILES.md`): isolated trees per task in several repositories from one project and chat, sparse checkout per subproject (fewer files, fewer tokens), reused dependency installs via copy-on-write clones, disk limits and automatic cleanup, checkpoints and restore. macOS native, Linux supported. [Why →](plugins/task-workspaces#why-use-it-instead-of-built-in-worktrees) |
 | [heat-check](plugins/heat-check) | ✓ | ✓ | Why is my computer hot, loud or slow right now: CPU per process and per app over a short sample, load, memory pressure and swap, thermal throttling, and on macOS the display scaling and screen capture that keep WindowServer busy, explained with safe fixes. Read-only, no root. macOS first, Linux supported. |
-| [writing-clearly-and-concisely](plugins/writing-clearly-and-concisely) | ✓ | ✓ | Clear, concise English and Russian prose: original English examples and references, separate Russian examples, preserved source attribution. |
+| [writing-clearly-and-concisely](plugins/writing-clearly-and-concisely) | ✓ | ✓ | Simple, natural English and Russian prose with a clear, logical flow: original English references, separate Russian examples, preserved source attribution. |
 
 ## Install
 

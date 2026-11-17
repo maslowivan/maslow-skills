@@ -1,7 +1,7 @@
 {
   "name": "writing-clearly-and-concisely",
-  "version": "0.1.0",
-  "description": "Write and edit clear, concise English and Russian prose. Preserves Strunk-based English references and adds separate Russian examples for documentation, messages, reports, and UI copy.",
+  "version": "0.1.1",
+  "description": "Write and edit simple, natural English and Russian prose with a clear, logical flow. Preserves English references and adds separate Russian examples.",
   "author": {
     "name": "maslowivan",
     "url": "https://github.com/maslowivan"

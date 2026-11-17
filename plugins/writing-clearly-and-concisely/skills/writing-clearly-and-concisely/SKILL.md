@@ -1,13 +1,35 @@
 ---
 name: writing-clearly-and-concisely
-description: Use when writing prose humans will read—documentation, commit messages, error messages, explanations, reports, or UI text. Applies Strunk's principles with preserved English references and separate Russian examples (ясно и кратко, без канцелярита).
+description: Use when writing prose humans will read—documentation, commit messages, error messages, explanations, reports, or UI text. Write in simple, natural language with a clear, logical flow (просто, понятно и логично). Preserves English references and adds separate Russian examples.
 ---
 
 # Writing Clearly and Concisely
 
 ## Overview
 
-Write with clarity and force. This skill covers what to do (Strunk) and what not to do (AI patterns).
+Write so the reader understands the point on the first reading. Use familiar
+words, explain how ideas connect, and sound like a person talking to the reader.
+Clarity and logical flow take priority over making the text shorter.
+
+## Simple, Natural, Logical Speech
+
+- Lead with the answer or main point. Then give the reason, needed details, and
+  the next step when there is one. Adapt the order to the reader's question.
+- Use ordinary words and direct verbs. Keep a technical term when it adds
+  precision; explain it when the reader may not know it.
+- Make the connection between sentences clear. Explain what caused a result,
+  what a pronoun refers to, and how a conclusion follows from the facts.
+  Do not invent a causal link just to make the story sound coherent.
+- Keep enough explanation for the reader to follow. Do not turn connected prose
+  into clipped fragments or a list of facts whose relationship is left unstated.
+- Match the reader's tone. Everyday words such as «нормально», «сейчас», «можно»
+  and «поможет» are welcome when they express the meaning. Do not automatically
+  replace them with formal wording or force slang into a formal document.
+- Read the result as something you would say aloud to this reader. Rewrite
+  phrases that sound stiff, pompous, translated, or need a second reading.
+
+For Russian, the goal is: «Пиши нормально: простыми словами, понятно и логично.
+Объясняй, как одна мысль связана с другой. Сохраняй смысл и естественный тон».
 
 ## When to Use This Skill
 

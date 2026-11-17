@@ -1,12 +1,12 @@
 # Writing Clearly and Concisely
 
-Write and edit clear prose in English and Russian: documentation, PR and commit
+Write and edit simple, natural prose in English and Russian with a clear, logical flow: documentation, PR and commit
 messages, reports, explanations, and UI copy.
 
 The [skill](skills/writing-clearly-and-concisely/SKILL.md) preserves the original
 English examples and references. The separate [Russian guide](skills/writing-clearly-and-concisely/russian-examples.md)
-adds examples of concision, active voice, concrete wording, punctuation, and
-natural Russian phrasing. It does not apply English grammar rules to Russian.
+adds examples of everyday speech, connected explanations, direct answers,
+concision, concrete wording, and Russian punctuation. It does not apply English grammar rules to Russian.
 
 ## Install
 
