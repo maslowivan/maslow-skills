@@ -1029,8 +1029,11 @@ def _kill_group(proc, sig=signal.SIGTERM):
 
 
 # --- gc ------------------------------------------------------------------------------------
-def gc(ctx, apply=False, skip=()):
-    """The cleanup policy. `skip`: task ids left alone (the task `ensure` is working on)."""
+def gc(ctx, apply=False, skip=(), need_bytes=None):
+    """The cleanup policy. `skip`: task ids left alone (the task `ensure` is working on).
+    `need_bytes`: disk space a refused `ensure` asked for; while the reserve is still short of
+    it after the trees are dealt with, unused dependency instances go too, the newest included
+    (they cost one reinstall, the reserve costs the user a question)."""
     policy = ctx.cfg.policy
     plan = []
     # leases: expired heartbeat is a signal to reconcile, never permission to delete
@@ -1155,7 +1158,8 @@ def gc(ctx, apply=False, skip=()):
                         checkpoint._delete_one(ctx.cfg, ctx.reg, tree, ck, src)
                         if not ctx.reg.valid_checkpoints(tree["id"]):
                             ctx.reg.update_tree(tree["id"], remote_covered_sha=ck["head_sha"])
-    cache = deps.gc_cache(ctx.cfg, ctx.reg, apply=apply)
+    cache = deps.gc_cache(ctx.cfg, ctx.reg, apply=apply,
+                          target_free=0 if need_bytes is None else disk.shortage(ctx.cfg, ctx.reg, need_bytes))
     for cand in cache["candidates"]:
         plan.append({"action": "delete_dependency_instance", **cand})
     return {"applied": apply, "plan": plan, "disk": disk.summary(ctx.cfg, ctx.reg)}
@@ -1345,19 +1349,22 @@ def _make_room(ctx, task_id, repos, new_task):
             need.append(repo)
     if not need:
         return None
+    estimate = sum(_estimate(ctx, repo) for repo in need)
     try:
-        disk.admit(ctx.cfg, ctx.reg, sum(_estimate(ctx, repo) for repo in need), new_trees=len(need),
-                   new_task=new_task)
+        disk.admit(ctx.cfg, ctx.reg, estimate, new_trees=len(need), new_task=new_task)
         return None
     except WspError as exc:
         if exc.code not in ("LIMIT_REACHED", "DISK_LOW"):
             return None
         reason = exc.code
     try:
-        result = gc(ctx, apply=True, skip=(task_id,))
+        result = gc(ctx, apply=True, skip=(task_id,), need_bytes=estimate if reason == "DISK_LOW" else None)
     except WspError:
         return None
     freed = [f"{p['action']} {p['task']}" for p in result["plan"] if p["action"] in _FREED_BY and "result" not in p]
+    cache = sum(1 for p in result["plan"] if p["action"] == "delete_dependency_instance")
+    if cache:
+        freed.append(f"{cache} unused dependency instance(s)")
     return f"{reason}: ran the cleanup policy first ({', '.join(freed) if freed else 'nothing could be freed'})"
 
 

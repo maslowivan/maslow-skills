@@ -157,7 +157,8 @@ def admit(cfg, reg, estimate_bytes, new_trees=0, new_task=False, kind="create"):
     if available - estimate_bytes < limits["min_free_gib"] * util.GIB:
         raise WspError(
             "DISK_LOW",
-            f"{kind} would leave less than the {limits['min_free_gib']} GiB reserve",
+            f"{kind} would leave less than the {limits['min_free_gib']} GiB reserve; free disk space or evict "
+            "an idle task. Lower limits.min_free_gib only when the user asks for it",
             free=util.human_bytes(free), reserved=util.human_bytes(reserved), estimate=util.human_bytes(estimate_bytes),
         )
     accounted = manager_usage(cfg, reg)
@@ -183,6 +184,13 @@ def admit(cfg, reg, estimate_bytes, new_trees=0, new_task=False, kind="create"):
                            "restorable). Raise limits.max_tasks_with_trees only when the user asks for it",
                            tasks_with_trees=len(tasks), limit=limits["max_tasks_with_trees"])
     return {"free_bytes": free, "reserved_bytes": reserved}
+
+
+def shortage(cfg, reg, estimate_bytes):
+    """Bytes missing for an operation of estimate_bytes to keep the reserve; 0 when it fits."""
+    reserved = sum(r["bytes"] for r in reg.active_reservations())
+    floor = max(cfg.limits["min_free_gib"], cfg.limits["emergency_free_gib"]) * util.GIB
+    return max(0, int(estimate_bytes + floor - (free_bytes(cfg.worktrees_root) - reserved)))
 
 
 def checkpoint_holders(reg):

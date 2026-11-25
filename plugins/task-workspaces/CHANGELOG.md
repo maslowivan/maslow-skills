@@ -17,6 +17,13 @@ release as `task-workspaces-v<version>`.
 - **Fixed:** Yarn's `.yarn/install-state.gz`, `.yarn/cache/` and
   `.yarn/unplugged/` were known as reproducible only at the repository root; in
   a package folder (`web/.yarn/install-state.gz`) they blocked eviction too.
+- **Fixed:** when `ensure` hit the disk reserve (`DISK_LOW`), the cleanup it ran
+  kept the newest unused dependency instance of every package, so gigabytes of
+  cache nobody used stayed while the agent asked the user to lower the reserve.
+  Under `DISK_LOW` unused instances are now removed, oldest first, until the new
+  trees fit; instances in use are never touched.
+- **Changed:** the `DISK_LOW` message and the skill tell the agent not to ask for
+  a lower `limits.min_free_gib`.
 
 ## 0.6.0 — 2026-11-25
 
