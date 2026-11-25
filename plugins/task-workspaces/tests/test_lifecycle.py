@@ -216,6 +216,22 @@ class CheckpointTests(Sandbox):
         self.wsp("evict", "--task", "unc", "--holder", "cli:test", "--accept-unclassified")
         self.assertFalse(os.path.exists(path))
 
+    def test_ignored_directory_is_classified_by_its_contents(self):
+        path = self.ensure("dirs")["trees"][0]["path"]
+        sh(["git", "config", "core.excludesFile", os.path.join(self.tmp, "ignore")], cwd=path)
+        self.write(os.path.join(self.tmp, "ignore"), "pkg/\nscratch/\n")
+        self.write(os.path.join(path, "pkg", ".env.local"), "TOKEN=1\n")
+        self.write(os.path.join(path, "pkg", ".yarn", "install-state.gz"), "x")
+        os.makedirs(os.path.join(path, "pkg", "empty"))
+        self.write(os.path.join(path, "scratch", "node_modules", "m.js"), "x")
+        self.write(os.path.join(path, "scratch", "notes.md"), "keep me\n")
+        err = self.wsp("evict", "--task", "dirs", "--holder", "cli:test", ok=False)
+        self.assertEqual(err["error"]["code"], "UNCLASSIFIED_IGNORED")
+        self.assertEqual(err["error"]["details"]["files"], ["scratch/notes.md"])
+        os.unlink(os.path.join(path, "scratch", "notes.md"))
+        self.wsp("evict", "--task", "dirs", "--holder", "cli:test")
+        self.assertFalse(os.path.exists(path))
+
     def test_running_process_blocks_evict(self):
         path = self.ensure("busy")["trees"][0]["path"]
         proc = subprocess.Popen(["sleep", "30"], cwd=path)

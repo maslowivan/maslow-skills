@@ -25,6 +25,8 @@ from .errors import WspError
 
 DEFAULT_REPRODUCIBLE = [
     "node_modules/", ".pnpm-store/", ".yarn/cache/", ".yarn/install-state.gz", ".yarn/unplugged/",
+    # the same Yarn files of a package below the root: a pattern with an inner '/' is anchored
+    "*/.yarn/cache/", "*/.yarn/install-state.gz", "*/.yarn/unplugged/",
     "dist/", "build/", "out/", "coverage/", ".cache/", ".turbo/", ".next/", ".nuxt/", ".astro/",
     ".svelte-kit/", ".vite/", ".vitest/", ".parcel-cache/", ".wrangler/", ".vercel/", ".netlify/",
     "__pycache__/", "*.pyc", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/", ".venv/", "venv/",
@@ -63,21 +65,55 @@ def _secret_entries(profile):
     return entries
 
 
+EXPAND_LIMIT = 5000
+
+
+def _children(tree_path, rel):
+    """Entries of an ignored directory (dirs with a trailing '/'); None when unreadable."""
+    try:
+        with os.scandir(os.path.join(tree_path, rel)) as it:
+            return sorted(rel + e.name + ("/" if e.is_dir(follow_symlinks=False) else "") for e in it)
+    except OSError:
+        return None
+
+
 def classify_ignored(tree_path, profile):
+    """Sort ignored paths into secret / preserve / reproducible / unclassified.
+
+    Git reports a directory with nothing tracked inside as one entry. Such a directory
+    that matches no pattern itself is opened and its contents are classified one by one:
+    a folder that only holds a materialized secret (`web/.env.local` in a sparse tree) or
+    `.yarn/install-state.gz` must not block eviction as "unknown"."""
     secrets_cfg = _secret_entries(profile)
     secret_patterns = [s["path"] for s in secrets_cfg] + DEFAULT_SECRETS
     preserve = profile.get("preserve_ignored") or []
     reproducible = (profile.get("reproducible_ignored") or []) + DEFAULT_REPRODUCIBLE
     result = {"preserve": [], "secret": [], "reproducible": [], "unclassified": []}
-    for path in gitutil.ignored_paths(tree_path):
+
+    def kind(path):
         if any(_match(path, p) for p in secret_patterns):
-            result["secret"].append(path)
-        elif any(_match(path, p) for p in preserve):
-            result["preserve"].append(path)
-        elif any(_match(path, p) for p in reproducible):
-            result["reproducible"].append(path)
-        else:
-            result["unclassified"].append(path)
+            return "secret"
+        if any(_match(path, p) for p in preserve):
+            return "preserve"
+        if any(_match(path, p) for p in reproducible):
+            return "reproducible"
+        return "unclassified"
+
+    pending = list(reversed(gitutil.ignored_paths(tree_path)))
+    budget, seen = EXPAND_LIMIT, set()
+    while pending:
+        path = pending.pop()
+        if path in seen:  # git may list a file next to its collapsed directory
+            continue
+        seen.add(path)
+        found = kind(path)
+        if found == "unclassified" and path.endswith("/") and budget > 0:
+            children = _children(tree_path, path)
+            if children is not None and len(children) <= budget:
+                budget -= len(children)
+                pending.extend(reversed(children))  # an empty directory holds nothing to lose
+                continue
+        result[found].append(path)
     return result
 
 

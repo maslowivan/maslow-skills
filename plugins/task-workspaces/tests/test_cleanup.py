@@ -10,6 +10,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from helpers import Sandbox, sh  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "skills", "task-workspaces", "scripts"))
+from wsp_core import disk  # noqa: E402
 
 FAKE_GH = """#!/bin/sh
 # prints the canned `gh pr list` answer for the branch given after --head
@@ -255,6 +257,39 @@ class MakeRoomTests(CleanupSandbox):
         err = self.wsp("ensure", "--task", "new", "--repo", "app", "--holder", "cli:test", ok=False)
         self.assertEqual(err["error"]["code"], "LIMIT_REACHED")
         self.assertTrue(os.path.isdir(old))
+
+class DiskReserveTests(CleanupSandbox):
+    def test_disk_low_releases_unused_dependency_instances(self):
+        if disk.clone_mode(self.tmp) is None:
+            self.skipTest("no copy-on-write on this volume: nothing is cached")
+        canon = self.canon["app"]
+        self.write(os.path.join(canon, "package.json"), '{"name": "app"}\n')
+        self.write(os.path.join(canon, "package-lock.json"), '{"lockfileVersion": 3}\n')
+        self.git(canon, "add", "-A")
+        self.git(canon, "commit", "-q", "-m", "pkg")
+        self.git(canon, "push", "-q", "origin", "main")
+        repos = self.cfg["repos"]
+        repos["app"]["profile"]["packages"] = {".": {"install_command": "mkdir -p node_modules/x && echo 1 > node_modules/x/i.js"}}
+        self.write_config(repos=repos)
+        self.ensure("old")
+        self.assertTrue(self.wsp("deps", "--task", "old", "--repo", "app")["cached"])
+        self.wsp("close", "--task", "old", "--holder", "cli:test")
+
+        def cached():
+            db = sqlite3.connect(os.path.join(self.state_dir, "registry.sqlite"))
+            try:
+                return db.execute("SELECT path FROM dep_instances").fetchall()
+            finally:
+                db.close()
+
+        self.assertEqual(len(cached()), 1)
+        self.wsp("gc", "--apply")
+        self.assertEqual(len(cached()), 1, "the newest unused instance survives an ordinary cleanup")
+        self.write_config(limits=dict(self.cfg["limits"], min_free_gib=10 ** 7))
+        err = self.wsp("ensure", "--task", "new", "--repo", "app", "--holder", "cli:test", ok=False)
+        self.assertEqual(err["error"]["code"], "DISK_LOW")
+        self.assertIn("only when the user asks", err["error"]["message"])
+        self.assertEqual(cached(), [])
 
 
 if __name__ == "__main__":

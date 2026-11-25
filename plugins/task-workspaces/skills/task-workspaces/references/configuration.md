@@ -83,6 +83,8 @@ Change values with `wsp config set limits.max_trees 20`, add repositories with
 - `reproducible_ignored` — ignored files that may be dropped (common build
   outputs and `node_modules` are built in).
 - Ignored files matching none of these block eviction until classified.
+  An ignored directory that matches no pattern itself is judged by its
+  contents, entry by entry; one matched by a pattern is taken as a whole.
 - Commands (`install_command`, `verify_command`, `command:` secret sources) from a
   profile committed inside the repository (`.wsp/profile.json`) are ignored unless
   the local config sets `repos.<name>.trust_shared_commands: true`; a cloned
