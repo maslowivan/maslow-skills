@@ -71,11 +71,33 @@ path or a branch checked out elsewhere is a conflict (`RESTORE_CONFLICT`,
 branch (checked with a fresh fetch; merge, fast-forward or squash — every tree
 needs commits of its own, no uncommitted changes, no checkpoint of unpublished
 work, no processes and no live lease; `policy.close_merged`), evict paused tasks older than
-`policy.paused_evict_after_hours`, close finished tasks whose work is on the
+`policy.paused_evict_after_hours` and tasks nobody used for
+`policy.idle_evict_after_days`, close finished tasks whose work is on the
 remote, delete checkpoints whose content reached the remote, drop unused
 dependency instances, mark stale leases `uncertain`, mark abandoned operations.
 Pinned, `unknown`, leased or process-used trees are kept; finished tasks with
 unpublished work are only reported (`needs_confirmation`).
+
+Merged pull requests. The content check (`git merge-tree`, see below) stops
+working once the default branch changes the same lines after a squash merge. With
+`policy.pr_lookup` (default) and the GitHub CLI available, `wsp gc` then runs
+`gh pr list --head <branch>` and treats the tree as merged when a pull request of
+that branch was merged into the default branch and the tree's HEAD is the pull
+request's head or an ancestor of it (fetching `refs/pull/N/head` if needed). Local
+commits after that head keep the task. A branch whose pull requests were all
+closed without merge is reported as `review` and never removed. `gh` missing,
+not signed in or offline means "unknown" — nothing is closed on a guess.
+
+Idle tasks. A task is idle when none of its sessions or leases showed activity
+and nothing in its ready trees changed (Git index, HEAD, reflog, uncommitted
+files) for `policy.idle_evict_after_days`. Its trees are evicted the same way as
+by `wsp evict` — a checkpoint keeps unpublished work, `wsp ensure` restores it —
+and its expired leases are released. The task itself stays open.
+
+Making room. When a new tree would hit `max_tasks_with_trees`, `max_trees` or the
+disk reserve, `wsp ensure` runs this policy once before failing (not in
+`janitor.mode: off`) and never touches the task it is ensuring. If it still
+fails, `details.idle_tasks` lists the tasks that can be evicted.
 
 With `janitor.mode: on-use` (default) the policy runs by itself in a detached
 background process after normal `wsp` commands and Claude Code hooks, at most
@@ -95,7 +117,8 @@ bundle and restores the tree. Without the flag the result is `SOURCE_MISSING`.
 `ensure` and `wsp run` refresh the lease heartbeat. `wsp gc` marks a held lease
 whose heartbeat is older than `policy.lease_stale_hours` (default 12) and has no
 live registered process as `uncertain`. An uncertain lease still protects the
-tree (nobody else can evict or close it); the holder re-acquires it with
+tree (no other session can evict or close it; only the idle rule above evicts it,
+restorably, after `policy.idle_evict_after_days`); the holder re-acquires it with
 `ensure`, or releases it explicitly with `wsp release --holder <holder>`. A
 registered process whose PID (checked together with its start time) is gone is
 cleared from the lease.
@@ -125,7 +148,7 @@ cleared from the lease.
 | FETCH_FAILED | 20 | network/auth; `--allow-stale-base` only with the user's consent (marked NOT fresh) |
 | BRANCH_EXISTS / BRANCH_BUSY | 21 / 22 | pick `--branch` or `--from-remote-branch` |
 | LOCKED | 25 | another wsp operation runs; retry later |
-| DISK_LOW / QUOTA_EXCEEDED / LIMIT_REACHED | 30 / 31 / 32 | free space or evict idle tasks (`wsp gc`); `wsp run` also returns DISK_LOW when it stopped a command over budget |
+| DISK_LOW / QUOTA_EXCEEDED / LIMIT_REACHED | 30 / 31 / 32 | `ensure` already ran the cleanup policy; evict a task from `details.idle_tasks`, do not raise limits unasked; `wsp run` also returns DISK_LOW when it stopped a command over budget |
 | LEASE_HELD | 40 | another session owns the tree |
 | PROCESS_RUNNING | 41 | stop listed processes first |
 | PINNED | 42 | `wsp unpin` only on request |

@@ -348,15 +348,17 @@ class GcTests(Sandbox):
         self.assertTrue(os.path.isdir(fresh))
         self.assertTrue(os.path.isdir(wip))
 
-    def test_old_in_progress_task_is_only_reviewed(self):
+    def test_old_registry_activity_alone_does_not_touch_a_tree_in_use(self):
+        # the session stopped calling wsp long ago, but the tree itself was touched just now
         path = self.ensure("old")["trees"][0]["path"]
         db = sqlite3.connect(os.path.join(self.state_dir, "registry.sqlite"))
-        db.execute("UPDATE trees SET updated_at='2020-01-01T00:00:00+00:00'")
+        db.execute("UPDATE trees SET updated_at='2020-01-01T00:00:00+00:00', created_at='2020-01-01T00:00:00+00:00'")
         db.execute("UPDATE leases SET heartbeat_at='2020-01-01T00:00:00+00:00'")
+        db.execute("UPDATE sessions SET last_seen='2020-01-01T00:00:00+00:00'")
         db.commit()
         db.close()
         applied = self.wsp("gc", "--apply")
-        self.assertIn("review", [p["action"] for p in applied["plan"]])
+        self.assertEqual([p["action"] for p in applied["plan"]], ["mark_lease_uncertain"])
         self.assertTrue(os.path.isdir(path))
 
     def test_pinned_is_kept(self):

@@ -85,6 +85,11 @@ If any command returns `CONFIG_MISSING`, run setup before anything else:
   `--discard` **only after the user explicitly confirms**.
 - Idle tasks are cleaned up automatically in the background (default `janitor.mode: on-use`);
   you do not need to run cleanup yourself. `wsp janitor status` shows the last run.
+- `LIMIT_REACHED` / `DISK_LOW` from `ensure`: `wsp` already ran the cleanup policy.
+  Do not ask the user to raise a limit. Evict a task from `details.idle_tasks` that
+  this conversation does not need (`wsp evict --task ID`: restorable, nothing is
+  lost) and retry; ask the user only if every listed task may still be in use or the
+  list is empty.
 - Overview: `wsp list`, `wsp status --task ID` (includes the task's set manifest),
   `wsp inventory` (all worktrees of configured repos, read-only), `wsp gc` (dry run
   of the cleanup policy).

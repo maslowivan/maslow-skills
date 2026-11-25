@@ -281,6 +281,12 @@ class Registry:
     def active_leases(self, tree_id):
         return self._all("SELECT * FROM leases WHERE tree_id=? AND state IN ('held','uncertain')", (tree_id,))
 
+    def last_lease_activity(self, tree_id):
+        """Latest heartbeat or release of any lease of the tree, released ones included."""
+        row = self._one("SELECT MAX(MAX(COALESCE(heartbeat_at, '')), MAX(COALESCE(released_at, ''))) AS ts"
+                        " FROM leases WHERE tree_id=?", (tree_id,))
+        return (row["ts"] if row else None) or None
+
     def leases_for_holder(self, holder):
         return self._all("SELECT * FROM leases WHERE holder=? AND state IN ('held','uncertain')", (holder,))
 
