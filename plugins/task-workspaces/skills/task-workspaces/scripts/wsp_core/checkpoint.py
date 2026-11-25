@@ -17,6 +17,7 @@ import fnmatch
 import json
 import os
 import shutil
+import subprocess
 import tarfile
 import tempfile
 
@@ -143,6 +144,40 @@ def _index_file(tree_path):
     return os.path.join(gitutil.absolute_git_dir(tree_path), "index")
 
 
+def _is_sparse(tree_path):
+    return gitutil.git(tree_path, "config", "--get", "core.sparseCheckout", check=False).stdout.strip() == "true"
+
+
+def _restore_outside_cone(tree_path, ck):
+    """Files the checkpoint added outside the sparse cone: `read-tree -u` skips them, so
+    they are written out by hand (they were untracked, the index does not know them)."""
+    added = gitutil.git(tree_path, "diff-tree", "-r", "-z", "--name-only", "--diff-filter=A",
+                        ck["index_tree"], ck["work_tree"]).stdout
+    missing = [p for p in added.split("\0") if p and not os.path.lexists(os.path.join(tree_path, p))]
+    if not missing:
+        return
+    listing = gitutil.git(tree_path, "ls-tree", "-r", "-z", ck["work_tree"]).stdout
+    entries = {}
+    for row in listing.split("\0"):
+        if row:
+            meta, _, path = row.partition("\t")
+            mode, kind, sha = meta.split()
+            entries[path] = (mode, kind, sha)
+    for path in missing:
+        mode, kind, sha = entries.get(path, (None, None, None))
+        if kind != "blob":
+            continue
+        full = os.path.join(tree_path, path)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        data = subprocess.run(["git", "-C", tree_path, "cat-file", "blob", sha], capture_output=True, check=True).stdout
+        if mode == "120000":
+            os.symlink(os.fsdecode(data), full)
+            continue
+        with open(full, "wb") as fh:
+            fh.write(data)
+        os.chmod(full, 0o755 if mode == "100755" else 0o644)
+
+
 def snapshot_trees(tree_path):
     """Return (index_tree, work_tree) without touching the real index."""
     index_tree = gitutil.out(tree_path, "write-tree")
@@ -157,7 +192,10 @@ def snapshot_trees(tree_path):
             os.unlink(tmp_index)
             env = {"GIT_INDEX_FILE": tmp_index}
             gitutil.git(tree_path, "read-tree", "HEAD", env=env)
-        gitutil.git(tree_path, "add", "-A", "--", ".", env=env)
+        # --sparse: an untracked file outside the sparse cone (a tool's cache in a folder the
+        # profile does not check out) must be saved too; without it `git add` refuses the path
+        sparse = ["--sparse"] if _is_sparse(tree_path) else []
+        gitutil.git(tree_path, "add", "-A", *sparse, "--", ".", env=env)
         work_tree = gitutil.out(tree_path, "write-tree", env=env)
     finally:
         if os.path.exists(tmp_index):
@@ -323,8 +361,9 @@ def restore_into(tree_path, ck):
     gitutil.git(tree_path, "read-tree", "--reset", "-u", ck["work_tree"])
     # Index := original index; untracked files become untracked again, files stay on disk.
     gitutil.git(tree_path, "read-tree", ck["index_tree"])
-    if gitutil.git(tree_path, "config", "--get", "core.sparseCheckout", check=False).stdout.strip() == "true":
+    if _is_sparse(tree_path):
         gitutil.git(tree_path, "sparse-checkout", "reapply")  # restore skip-worktree bits outside the cone
+        _restore_outside_cone(tree_path, ck)
     if ck["ignored_archive"]:
         with tarfile.open(ck["ignored_archive"], "r:gz") as tar:
             for member in tar.getmembers():
