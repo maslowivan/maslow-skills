@@ -28,7 +28,7 @@
     "run_max_growth_gib": null
   },
   "policy": {"paused_evict_after_hours": 24, "stale_review_after_days": 7, "keep_checkpoints_per_tree": 2,
-             "lease_stale_hours": 12},
+             "lease_stale_hours": 12, "close_merged": true, "pr_lookup": true, "idle_evict_after_days": 7},
   "exclusions": {"time_machine": true, "spotlight": true},
   "janitor": {"mode": "on-use", "interval_minutes": 60},
   "repos": {
@@ -49,6 +49,10 @@ Change values with `wsp config set limits.max_trees 20`, add repositories with
 - `checkpoints_gib` — when exceeded, growth is blocked; checkpoints are never deleted to make room.
 - `dependency_cache_gib` — unused instances are dropped first; if still full, new installs are not cached.
 - `run_max_growth_gib` — default disk budget of one `wsp run` command (override with `--max-growth-gib`).
+- `pr_lookup` — `wsp gc` asks GitHub (`gh pr list`) whether a branch's pull request was merged when the
+  content check cannot tell; `repos.<name>.github: "owner/name"` names the repository if the origin URL does not.
+- `idle_evict_after_days` — `wsp gc` evicts (checkpoint first, restorable) the trees of a task nobody used
+  for this long; `0` keeps them until someone evicts or closes the task.
 - `lease_stale_hours` — after this without a heartbeat, `wsp gc` marks a lease `uncertain` (still protective).
 - `janitor.mode` — `on-use` (default): the cleanup policy runs in a detached background process after normal
   wsp commands and Claude Code hooks, at most once per `interval_minutes`, no service; `scheduled`: a

@@ -187,6 +187,10 @@ def unpushed_count(path, ref="HEAD"):
     return int(out(path, "rev-list", "--count", ref, "--not", "--remotes"))
 
 
+def object_exists(path, sha):
+    return bool(sha) and git(path, "cat-file", "-e", f"{sha}^{{commit}}", check=False).returncode == 0
+
+
 def is_ancestor(path, a, b):
     return git(path, "merge-base", "--is-ancestor", a, b, check=False).returncode == 0
 

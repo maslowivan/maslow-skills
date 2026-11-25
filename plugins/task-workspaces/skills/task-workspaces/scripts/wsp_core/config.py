@@ -40,6 +40,12 @@ DEFAULTS = {
         "keep_checkpoints_per_tree": 2,
         "lease_stale_hours": 12,
         "close_merged": True,  # gc closes tasks whose work is already in the default branch
+        # also ask GitHub (`gh`) whether the branch's pull request was merged: the content check
+        # stops working once the default branch changes the same lines again
+        "pr_lookup": True,
+        # gc evicts (checkpoint first, restorable) trees of tasks nobody touched for this many
+        # days, so forgotten tasks stop counting against the limits; 0 turns it off
+        "idle_evict_after_days": 7,
     },
     "agents": {"claude_hooks": False, "codex": False},
     "exclusions": {"time_machine": False, "spotlight": False},
@@ -56,6 +62,8 @@ REPO_DEFAULTS = {
     "origin": None,
     "default_branch": None,
     "estimate_gib": None,
+    # "owner/name" on GitHub when the origin URL does not show it (SSH host alias, Enterprise).
+    "github": None,
     # Allow <repo>/.wsp/profile.json to define commands (install/verify, command: secrets).
     "trust_shared_commands": False,
     "profile": {},

@@ -205,10 +205,13 @@ and the CLI, so you configure once for both agents:
 
 The cleanup policy (`wsp gc`) closes tasks whose work has been merged into the
 default branch (merge, fast-forward or squash — no need to run `wsp close` after
-a PR is merged), evicts paused tasks after 24 hours and removes finished tasks
-whose work is on the remote. It never deletes unpublished work without your
-confirmation, waits while a session still holds a task, and never touches other
-tools' worktrees. How it runs
+a PR is merged; with the GitHub CLI `gh` installed it also recognises a merged
+pull request after the default branch has moved on), evicts paused tasks after 24
+hours and tasks nobody used for 7 days (`wsp ensure` restores them, unpublished
+work included) and removes finished tasks whose work is on the remote. `wsp
+ensure` runs the same policy before it would refuse a new tree because of a
+limit. It never deletes unpublished work without your confirmation, waits while a
+session still holds a task, and never touches other tools' worktrees. How it runs
 is set by `janitor.mode`:
 
 | Mode | How it runs |

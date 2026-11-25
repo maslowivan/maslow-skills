@@ -5,6 +5,38 @@ plugin bumps `version` in both `.claude-plugin/plugin.json` and
 `.codex-plugin/plugin.json` and adds a section here; CI enforces it and tags the
 release as `task-workspaces-v<version>`.
 
+## 0.6.0 — 2026-11-25
+
+Forgotten tasks no longer pile up until the limits are hit.
+
+- **Fixed:** a task whose pull request was merged stayed forever when the default
+  branch later changed the same lines: from then on merging the branch conflicts,
+  so the content check could never prove the merge again. `wsp gc` now also asks
+  GitHub through `gh` (`policy.pr_lookup`, on by default) and closes the task when
+  a pull request of the branch was merged into the default branch and the tree's
+  HEAD is that pull request's head or an ancestor of it. Commits made after the
+  merged head, uncommitted changes, checkpoints of unpublished work, running
+  processes and a live lease still keep the task. Without `gh`, or for other
+  hosts, nothing changes. `repos.<name>.github: "owner/name"` names the repository
+  when the origin URL does not (SSH host alias).
+- **Added:** `policy.idle_evict_after_days` (default 7, `0` turns it off): `wsp gc`
+  evicts the trees of a task nobody used for that long — unpublished work goes
+  into a checkpoint first and `wsp ensure` restores the tree. Before, only tasks
+  explicitly paused with `wsp release --pause` were evicted, so trees of sessions
+  that simply ended counted against `max_tasks_with_trees` for good. "Used" means
+  session and lease activity and the tree's own files (Git index, HEAD, reflog,
+  uncommitted files), so an agent that works in a tree without calling `wsp` is
+  not interrupted.
+- **Added:** `wsp ensure` runs the cleanup policy once before it would fail with
+  `LIMIT_REACHED` or `DISK_LOW`, and says so in `warnings`. If that frees nothing,
+  the error lists `idle_tasks` that can be evicted, and its message no longer
+  suggests raising the limit.
+- **Added:** `wsp gc` reports tasks whose pull request was closed without merge
+  (`review`, with the `wsp close --status cancelled` command); they are never
+  removed automatically.
+- **Changed:** the idle age in `wsp gc` no longer uses the tree's registry
+  timestamp, which every size measurement refreshed.
+
 ## 0.5.4 — 2026-10-09
 
 - **Fixed:** flaky `test_queries_by_repo_fetch_the_default_branch_first` on macOS

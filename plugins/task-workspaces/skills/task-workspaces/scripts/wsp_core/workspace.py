@@ -6,11 +6,12 @@ import shutil
 import signal
 import socket
 import subprocess
+import time
 
 import json
 import re
 
-from . import checkpoint, deps, disk, gitutil, locks, manifests, procs, safety, sparse, util
+from . import checkpoint, deps, disk, forge, gitutil, locks, manifests, procs, safety, sparse, util
 from .errors import WspError
 
 ACTIVE_STATES = ("ready",)
@@ -206,11 +207,14 @@ def ensure(ctx, task_id, repos, title=None, tracker_ref=None, holder=None, base_
     _guard_root(ctx)
     task = ctx.reg.get_task(task_id)
     new_task = task is None or not [t for t in ctx.reg.trees_for_task(task_id) if t["state"] != "evicted"]
+    made_room = _make_room(ctx, task_id, repos, new_task)
     status = None if task and task["status"] in ("in_progress", "open") else "in_progress"
     ctx.reg.upsert_task(task_id, title=title, tracker_ref=tracker_ref, status=status)
     ctx.reg.attach_session(task_id, holder, app=app, session_id=session_id, confirmed=confirmed)
 
     results, created, warnings = [], [], []
+    if made_room:
+        warnings.append(made_room)
     op = _op(ctx, "ensure", task_id, repos=repos)
     try:
         with locks.locked(ctx.cfg.state_dir, f"task:{task_id}"):
@@ -250,6 +254,8 @@ def ensure(ctx, task_id, repos, title=None, tracker_ref=None, holder=None, base_
         if isinstance(exc, WspError):
             exc.details.setdefault("rolled_back", rolled_back)
             exc.details.setdefault("completed", [r["repo"] for r in results])
+            if exc.code in ("LIMIT_REACHED", "DISK_LOW"):
+                exc.details.setdefault("idle_tasks", _idle_candidates(ctx, skip=task_id))
         raise
     summary = disk.summary(ctx.cfg, ctx.reg)
     if summary["level"] != "ok":
@@ -1023,7 +1029,8 @@ def _kill_group(proc, sig=signal.SIGTERM):
 
 
 # --- gc ------------------------------------------------------------------------------------
-def gc(ctx, apply=False):
+def gc(ctx, apply=False, skip=()):
+    """The cleanup policy. `skip`: task ids left alone (the task `ensure` is working on)."""
     policy = ctx.cfg.policy
     plan = []
     # leases: expired heartbeat is a signal to reconcile, never permission to delete
@@ -1041,7 +1048,7 @@ def gc(ctx, apply=False):
             if lease["state"] == "held" and age >= stale_hours and not alive_run:
                 plan.append({"action": "mark_lease_uncertain", "task": tree["task_id"], "repo": tree["repo"],
                              "holder": lease["holder"], "idle_hours": round(age, 1),
-                             "why": "no heartbeat; the tree stays protected until the holder releases it"})
+                             "why": "no heartbeat; other sessions still cannot take the tree"})
                 if apply:
                     ctx.reg.release_lease(lease["id"], state="uncertain")
     # abandoned operations
@@ -1050,8 +1057,10 @@ def gc(ctx, apply=False):
             plan.append({"action": "mark_operation_abandoned", "operation": op["id"], "kind": op["kind"]})
             if apply:
                 ctx.reg.finish_operation(op["id"], "abandoned")
-    fetched = {}
+    fetched, prs = {}, {}
     for task in ctx.reg.list_tasks():
+        if task["id"] in skip:
+            continue
         trees = [reconcile(ctx, t) for t in ctx.reg.trees_for_task(task["id"])]
         if not trees:
             continue
@@ -1080,7 +1089,7 @@ def gc(ctx, apply=False):
                 close(ctx, task["id"], status=task["status"], holder="gc:janitor")
             continue
         if policy.get("close_merged", True):
-            merged, why = _merged_task(ctx, trees, leases, stale_hours, fetched)
+            merged, why = _merged_task(ctx, trees, leases, stale_hours, fetched, prs)
             if merged:
                 plan.append({"action": "close_merged", "task": task["id"], "why": why})
                 if apply:
@@ -1104,10 +1113,28 @@ def gc(ctx, apply=False):
                     except WspError as exc:
                         plan[-1]["result"] = exc.to_dict()
             continue
-        last = max((t["updated_at"] or "") for t in trees)
-        heartbeat = max([(l["heartbeat_at"] or "") for l in leases] + [last])
-        age_days = (util.age_hours(heartbeat) or 0) / 24
-        if age_days >= policy["stale_review_after_days"]:
+        age_days = _idle_days(ctx, task["id"], trees)
+        closed_pr = _closed_unmerged(trees, prs)
+        evict_after = float(policy.get("idle_evict_after_days") or 0)
+        busy = [l for l in leases if l["pid"] and procs.pid_alive(l["pid"], l["pid_start"])]
+        if evict_after and age_days >= evict_after and not busy and any(t["state"] == "ready" for t in trees):
+            # restorable: unpublished work goes into a checkpoint first, `wsp ensure` brings the tree back
+            entry = {"action": "evict_idle", "task": task["id"], "idle_days": round(age_days, 1),
+                     "why": "nobody used the task; the trees stay restorable with `wsp ensure`"}
+            if closed_pr:
+                entry["note"] = closed_pr
+            plan.append(entry)
+            if apply:
+                try:
+                    for lease in leases:  # older than the idle threshold: the session is gone
+                        ctx.reg.release_lease(lease["id"])
+                    evict(ctx, task["id"], holder="gc:janitor", reason="gc-idle")
+                except WspError as exc:
+                    plan[-1]["result"] = exc.to_dict()
+            continue
+        if closed_pr:
+            plan.append({"action": "review", "task": task["id"], "idle_days": round(age_days, 1), "why": closed_pr})
+        elif age_days >= policy["stale_review_after_days"]:
             plan.append({"action": "review", "task": task["id"], "idle_days": round(age_days, 1),
                          "why": "old activity alone never allows removal"})
     # checkpoints whose content reached the remote
@@ -1153,11 +1180,12 @@ def _fresh_default_ref(ctx, repo, fetched):
     return ref
 
 
-def _merged_task(ctx, trees, leases, stale_hours, fetched):
+def _merged_task(ctx, trees, leases, stale_hours, fetched, prs):
     """(True, why) when every tree's work is already in its repository's default branch and
     nothing else would be lost; (False, reason-to-report or None) otherwise."""
     if any(t["state"] not in ("ready", "evicted") for t in trees):
         return False, None
+    merged_prs = []
     for tree in trees:
         if tree["state"] == "ready":
             head = gitutil.rev_parse(tree["path"], "HEAD")
@@ -1165,11 +1193,21 @@ def _merged_task(ctx, trees, leases, stale_hours, fetched):
             if ctx.reg.valid_checkpoints(tree["id"]):
                 return False, None  # unpublished work was saved: never closed automatically
             head = tree["head_sha"]
-        if not head or head == tree["base_sha"]:
-            return False, None  # no commits of its own yet: a fresh task, not a merged one
-        ref = _fresh_default_ref(ctx, tree["repo"], fetched)
-        if not ref or not gitutil.merged_into(tree["source_path"], head, ref):
+        if not head:
             return False, None
+        ref = _fresh_default_ref(ctx, tree["repo"], fetched)
+        if not ref:
+            return False, None
+        src = tree["source_path"]
+        if head == tree["base_sha"] and gitutil.is_ancestor(src, head, ref):
+            return False, None  # no commits of its own yet: a fresh task, not a merged one
+        if head == tree["base_sha"] or not gitutil.merged_into(src, head, ref):
+            # the content check fails for good once the default branch changes the same lines
+            # after a squash merge; the pull request still knows the branch was merged
+            number = _merged_pull_request(ctx, tree, head, prs)
+            if not number:
+                return False, None
+            merged_prs.append(f"#{number}")
         if tree["state"] == "ready":
             if gitutil.status_entries(tree["path"]):
                 return False, "work merged, but the tree has uncommitted changes"
@@ -1180,7 +1218,147 @@ def _merged_task(ctx, trees, leases, stale_hours, fetched):
     if live:
         return False, "work merged; waiting for the session to release its lease: " + ", ".join(
             sorted({l["holder"] for l in live}))
+    if merged_prs:
+        many = len(merged_prs) > 1
+        return True, (f"pull request{'s' if many else ''} {', '.join(merged_prs)} "
+                      f"{'were' if many else 'was'} merged into the default branch")
     return True, "all work is in the default branch"
+
+
+def _branch_prs(ctx, tree, prs):
+    """Pull requests of the tree's branch, asked once per gc run; None when unknown."""
+    if not ctx.cfg.policy.get("pr_lookup", True) or not tree["branch"]:
+        return None
+    key = (tree["repo"], tree["branch"])
+    if key not in prs:
+        try:
+            repo_cfg = ctx.cfg.repo(tree["repo"])
+        except WspError:
+            repo_cfg = {}
+        slug = forge.github_slug(repo_cfg, tree["origin"])
+        prs[key] = forge.pull_requests(slug, tree["branch"]) if slug else None
+    return prs[key]
+
+
+def _merged_pull_request(ctx, tree, head, prs):
+    """Number of a pull request merged into the default branch that contains `head`
+    (its head is `head` or a descendant of it), else None. Local commits made after the
+    merged head are not covered, so such a tree is never reported as merged."""
+    src = tree["source_path"]
+    try:
+        default = _default_ref(ctx.cfg.repo(tree["repo"]))[0]
+    except WspError:
+        return None
+    for pr in _branch_prs(ctx, tree, prs) or []:
+        if pr["state"] != "MERGED" or not pr["head"] or pr["base"] != default:
+            continue
+        if pr["head"] == head:
+            return pr["number"]
+        if not gitutil.object_exists(src, pr["head"]):
+            try:
+                gitutil.git(src, "fetch", "--quiet", "--no-tags", "origin", f"refs/pull/{pr['number']}/head",
+                            check=False, timeout=120)
+            except WspError:
+                pass
+        if gitutil.object_exists(src, pr["head"]) and gitutil.is_ancestor(src, head, pr["head"]):
+            return pr["number"]
+    return None
+
+
+def _closed_unmerged(trees, prs):
+    """A note when a branch of the task has only pull requests closed without merge
+    (from the lookups this run already made); such work is never removed automatically."""
+    for tree in trees:
+        found = prs.get((tree["repo"], tree["branch"])) or []
+        states = {pr["state"] for pr in found}
+        if "CLOSED" in states and not states & {"OPEN", "MERGED"}:
+            numbers = ", ".join(f"#{pr['number']}" for pr in found if pr["state"] == "CLOSED")
+            return (f"pull request {numbers} was closed without merge; if the work is abandoned: "
+                    f"`wsp close --task {tree['task_id']} --status cancelled`")
+    return None
+
+
+def _tree_touched_at(tree):
+    """Latest sign of work inside a ready tree: Git state files and uncommitted files.
+    Registry timestamps are not enough, an agent can work in a tree for days without calling wsp."""
+    stamps = []
+    try:
+        admin = gitutil.absolute_git_dir(tree["path"])
+        paths = [os.path.join(admin, name) for name in ("index", "HEAD", "ORIG_HEAD", os.path.join("logs", "HEAD"))]
+        paths += [os.path.join(tree["path"], p) for _, p in gitutil.status_entries(tree["path"])[:200]]
+    except (WspError, OSError):
+        return None
+    for path in paths:
+        try:
+            stamps.append(os.lstat(path).st_mtime)
+        except OSError:
+            pass
+    return max(stamps) if stamps else None
+
+
+def _idle_days(ctx, task_id, trees):
+    """Days since anybody used the task: sessions, leases (released ones too) and the trees themselves."""
+    stamps = []
+    for value in [s["last_seen"] for s in ctx.reg.sessions_for_task(task_id)] + [
+            v for t in trees for v in (t["created_at"], ctx.reg.last_lease_activity(t["id"]))]:
+        ts = util.parse_iso(value)
+        if ts is not None:
+            stamps.append(ts.timestamp())
+    for tree in trees:
+        if tree["state"] == "ready":
+            touched = _tree_touched_at(tree)
+            if touched:
+                stamps.append(touched)
+    if not stamps:
+        return 0.0
+    return max(0.0, (time.time() - max(stamps)) / 86400)
+
+
+def _idle_candidates(ctx, skip=None, limit=8):
+    """Tasks whose trees could be evicted to make room, longest idle first."""
+    stale_hours = float(ctx.cfg.policy.get("lease_stale_hours", 12))
+    out = []
+    for task in ctx.reg.list_tasks():
+        trees = [t for t in ctx.reg.trees_for_task(task["id"]) if t["state"] == "ready"]
+        if not trees or task["pinned"] or task["id"] == skip:
+            continue
+        leases = [l for t in trees for l in ctx.reg.active_leases(t["id"])]
+        if any(l["state"] == "held" and (util.age_hours(l["heartbeat_at"]) or 0) < stale_hours for l in leases):
+            continue
+        out.append({"task": task["id"], "idle_days": round(_idle_days(ctx, task["id"], trees), 1),
+                    "size": util.human_bytes(sum(t["size_bytes"] or 0 for t in trees))})
+    return sorted(out, key=lambda c: -c["idle_days"])[:limit]
+
+
+_FREED_BY = ("close_merged", "close_cleanup", "evict", "evict_idle")
+
+
+def _make_room(ctx, task_id, repos, new_task):
+    """Before `ensure` grows: if a count limit or the disk reserve would refuse the new trees,
+    run the cleanup policy once instead of failing. Returns a warning for the caller or None."""
+    if ctx.cfg.data["janitor"].get("mode", "on-use") == "off":
+        return None
+    need = []
+    for repo in repos:
+        tree = ctx.reg.find_tree(task_id, repo)
+        if not tree or tree["state"] in ("evicted", "missing", "closed"):
+            need.append(repo)
+    if not need:
+        return None
+    try:
+        disk.admit(ctx.cfg, ctx.reg, sum(_estimate(ctx, repo) for repo in need), new_trees=len(need),
+                   new_task=new_task)
+        return None
+    except WspError as exc:
+        if exc.code not in ("LIMIT_REACHED", "DISK_LOW"):
+            return None
+        reason = exc.code
+    try:
+        result = gc(ctx, apply=True, skip=(task_id,))
+    except WspError:
+        return None
+    freed = [f"{p['action']} {p['task']}" for p in result["plan"] if p["action"] in _FREED_BY and "result" not in p]
+    return f"{reason}: ran the cleanup policy first ({', '.join(freed) if freed else 'nothing could be freed'})"
 
 
 def _close_preview(ctx, task_id, trees):

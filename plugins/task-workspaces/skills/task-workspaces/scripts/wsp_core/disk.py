@@ -173,12 +173,14 @@ def admit(cfg, reg, estimate_bytes, new_trees=0, new_task=False, kind="create"):
                        holders=checkpoint_holders(reg))
     on_disk = [t for t in reg.all_trees() if t["state"] not in ("evicted", "closed", "missing")]
     if new_trees and len(on_disk) + new_trees > limits["max_trees"]:
-        raise WspError("LIMIT_REACHED", "tree limit reached; evict idle trees or raise limits.max_trees",
+        raise WspError("LIMIT_REACHED", "tree limit reached; evict an idle task (`wsp evict --task <id>` keeps it restorable). "
+                       "Raise limits.max_trees only when the user asks for it",
                        trees_on_disk=len(on_disk), limit=limits["max_trees"])
     if new_task:
         tasks = {t["task_id"] for t in on_disk}
         if len(tasks) + 1 > limits["max_tasks_with_trees"]:
-            raise WspError("LIMIT_REACHED", "task limit reached; evict idle tasks or raise limits.max_tasks_with_trees",
+            raise WspError("LIMIT_REACHED", "task limit reached; evict an idle task (`wsp evict --task <id>` keeps it "
+                           "restorable). Raise limits.max_tasks_with_trees only when the user asks for it",
                            tasks_with_trees=len(tasks), limit=limits["max_tasks_with_trees"])
     return {"free_bytes": free, "reserved_bytes": reserved}
 
