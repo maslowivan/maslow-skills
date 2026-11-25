@@ -5,6 +5,19 @@ plugin bumps `version` in both `.claude-plugin/plugin.json` and
 `.codex-plugin/plugin.json` and adds a section here; CI enforces it and tags the
 release as `task-workspaces-v<version>`.
 
+## 0.6.1 — 2026-11-25
+
+- **Fixed:** an ignored directory with nothing tracked inside was judged as one
+  entry, so a folder that held only a secret `wsp` had put there itself
+  (`web/.env.local` in a sparse tree) or only `.yarn/install-state.gz` blocked
+  eviction with `UNCLASSIFIED_IGNORED` on every cleanup run. A directory that
+  matches no pattern itself is now opened and its contents are classified one by
+  one; the error lists the files that are really unknown. A directory matched by
+  `preserve_ignored` or `reproducible_ignored` is still taken as a whole.
+- **Fixed:** Yarn's `.yarn/install-state.gz`, `.yarn/cache/` and
+  `.yarn/unplugged/` were known as reproducible only at the repository root; in
+  a package folder (`web/.yarn/install-state.gz`) they blocked eviction too.
+
 ## 0.6.0 — 2026-11-25
 
 Forgotten tasks no longer pile up until the limits are hit.
