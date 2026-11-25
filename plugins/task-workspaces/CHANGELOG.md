@@ -5,6 +5,14 @@ plugin bumps `version` in both `.claude-plugin/plugin.json` and
 `.codex-plugin/plugin.json` and adds a section here; CI enforces it and tags the
 release as `task-workspaces-v<version>`.
 
+## 0.6.2 — 2026-11-25
+
+- **Fixed:** a sparse tree with an untracked file outside its cone (a tool's cache
+  such as `.vite/results.json` in a folder the profile does not check out) could
+  not be checkpointed: `git add` refused the path, so `evict`, `close` and the
+  cleanup policy failed with `GIT_FAILED` on every run. The snapshot now includes
+  such files, and restore writes them back.
+
 ## 0.6.1 — 2026-11-25
 
 - **Fixed:** an ignored directory with nothing tracked inside was judged as one

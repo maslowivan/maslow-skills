@@ -224,6 +224,21 @@ class SparseTreeTests(SparseSandbox):
         self.assertIn("services/api", added["added"])
         self.assertIn("services/api/src/main.ts", self.files(path))
 
+    def test_untracked_file_outside_the_cone_survives_evict_and_restore(self):
+        path = self.ensure("out", "mono", extra=("--profile", "web"))["trees"][0]["path"]
+        self.write(os.path.join(path, "scratch", "results.json"), '{"ok": true}\n')
+        self.write(os.path.join(path, "services", "api", "note.txt"), "inside a folder left out\n")
+        before = self.git(path, "status", "--porcelain", "-uall").stdout
+        self.assertIn("scratch/results.json", before)
+        self.wsp("evict", "--task", "out", "--holder", "cli:test")
+        self.assertFalse(os.path.exists(path))
+        self.assertEqual(self.ensure("out", "mono")["trees"][0]["action"], "restored")
+        with open(os.path.join(path, "scratch", "results.json")) as fh:
+            self.assertEqual(fh.read(), '{"ok": true}\n')
+        self.assertTrue(os.path.isfile(os.path.join(path, "services", "api", "note.txt")))
+        self.assertEqual(self.git(path, "status", "--porcelain", "-uall").stdout, before)
+        self.assertNotIn("services/api/src/main.ts", self.files(path))
+
     def test_full_checkout_warns_when_profiles_exist(self):
         res = self.ensure("web-fix", "mono")
         tree = res["trees"][0]
